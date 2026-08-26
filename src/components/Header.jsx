@@ -3,21 +3,8 @@ function Header() {
   return (
     <header className="header">
       <div className="logo">
-        <div style={{
-          width: '60px',
-          height: '60px',
-          borderRadius: '50%',
-          background: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '1.5rem',
-          fontWeight: 'bold',
-          color: '#00b14f'
-        }}>
-          L
-        </div>
-        <h1>LUMI <span>GLOBAL</span> Admin</h1>
+        <img src="/logo-express-exacting.png" alt="Express & Exacting" />
+        <h1>HR Management <span>Admin</span></h1>
       </div>
       <div className="user-info">
         <span>Admin</span>

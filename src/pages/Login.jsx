@@ -62,20 +62,17 @@ function Login() {
                 padding: '60px'
             }}>
                 <div style={{ marginBottom: '40px' }}>
-                    <div style={{
-                        width: '60px',
-                        height: '60px',
-                        background: 'var(--primary)',
-                        borderRadius: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: '20px',
-                        color: '#fff',
-                        fontSize: '1.8rem'
-                    }}>
-                        <i className="fas fa-plane-departure"></i>
-                    </div>
+                    <img
+                        src="/logo-express-exacting.png"
+                        alt="Express & Exacting"
+                        style={{
+                            width: '120px',
+                            height: '120px',
+                            objectFit: 'contain',
+                            borderRadius: '16px',
+                            marginBottom: '20px'
+                        }}
+                    />
                     <h2 style={{ color: 'var(--primary)', fontSize: '2rem', marginBottom: '10px', fontWeight: '800' }}>WELCOME BACK</h2>
                     <p className="text-muted" style={{ fontSize: '1.1rem' }}>Đăng nhập hệ thống quản lý nhân sự</p>
                 </div>
@@ -173,7 +170,18 @@ function Login() {
                 }}></div>
 
                 <div style={{ position: 'relative', zIndex: 10, textAlign: 'center' }}>
-                    <i className="fas fa-city" style={{ fontSize: '6rem', marginBottom: '30px', opacity: 0.9 }}></i>
+                    <img
+                        src="/logo-express-exacting.png"
+                        alt="Express & Exacting"
+                        style={{
+                            width: '260px',
+                            height: '260px',
+                            objectFit: 'contain',
+                            borderRadius: '24px',
+                            marginBottom: '30px',
+                            boxShadow: '0 18px 45px rgba(0,0,0,0.18)'
+                        }}
+                    />
                     <h1 style={{ fontSize: '3.5rem', fontWeight: '800', marginBottom: '10px', letterSpacing: '2px' }}>CẢNG HÀNG KHÔNG</h1>
                     <h3 style={{ fontSize: '1.5rem', fontWeight: '300', opacity: 0.8, letterSpacing: '5px' }}>QUỐC TẾ</h3>
 

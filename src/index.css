@@ -52,9 +52,9 @@ body {
 .logo img {
   height: 60px;
   width: 60px;
-  border-radius: 50%;
+  border-radius: 12px;
   background: #fff;
-  padding: 5px;
+  padding: 2px;
   object-fit: contain;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
@@ -118,6 +118,25 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px 18px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.brand img {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: #fff;
 }
 
 .nav-item {

@@ -19,7 +19,7 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <i className="fas fa-layer-group"></i>
+        <img src="/logo-express-exacting.png" alt="Express & Exacting" />
         <span>HR Manager</span>
       </div>
 
