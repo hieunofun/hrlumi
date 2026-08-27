@@ -84,18 +84,22 @@ export const mapUserToApp = (user) => {
     chi_nhanh: user.branch || '',
     bo_phan: user.department || '',
     vi_tri: user.position || '',
-    trang_thai: user.employment_status || user.status || 'Thử việc', // Fallback to status if employment_status empty
+    trang_thai: user.employment_status || '',
+    tinh_trang: user.status || '',
     ca_lam_viec: user.shift || '',
     ngay_vao_lam: user.join_date || '',
     ngay_lam_chinh_thuc: user.official_date || '',
     cccd: user.cccd || '',
-    ngay_cap: user.identity_issue_date || '', // New column
-    noi_cap: user.identity_issue_place || '', // New column
+    ngay_cap: user.identity_issue_date || '',
+    noi_cap: user.identity_issue_place || '',
     dia_chi_thuong_tru: user.address || '',
     que_quan: user.hometown || '',
     ngay_sinh: user.dob || '',
     gioi_tinh: user.gender || '',
     tinh_trang_hon_nhan: user.marital_status || '',
+    ghi_chu: user.notes || '',
+    co_che_luong: user.salary_mechanism || '',
+    tong_luong: user.total_salary || '',
     avatarDataUrl: user.avatar_url || '',
     files: Array.isArray(user.documents)
       ? user.documents
@@ -107,42 +111,73 @@ export const mapUserToApp = (user) => {
   }
 }
 
-// Helper to convert DD/MM/YYYY to YYYY-MM-DD
-const formatDateForDB = (dateStr) => {
-  if (!dateStr) return null
-  const str = String(dateStr).trim()
+// Expand 2-digit year: 00-29 → 2000-2029, 30-99 → 1930-1999
+const expandYear = (yearToken) => {
+  const raw = String(yearToken || '').trim()
+  if (/^\d{4}$/.test(raw)) return raw
+  if (/^\d{1,2}$/.test(raw)) {
+    const n = Number(raw)
+    if (n <= 29) return String(2000 + n)
+    return String(1900 + n)
+  }
+  return raw
+}
 
-  // Already in YYYY-MM-DD
-  if (str.match(/^\d{4}-\d{2}-\d{2}$/)) return str
+// Parse Excel/HR dates: 10/7/26, 3/8/2026, 2026-07-10 → YYYY-MM-DD
+export const parseFlexibleDate = (dateStr) => {
+  if (dateStr == null || dateStr === '') return null
+  if (dateStr instanceof Date && !Number.isNaN(dateStr.getTime())) {
+    const dd = String(dateStr.getDate()).padStart(2, '0')
+    const mm = String(dateStr.getMonth() + 1).padStart(2, '0')
+    return `${dateStr.getFullYear()}-${mm}-${dd}`
+  }
 
-  // Handle DD/MM/YYYY
-  if (str.includes('/')) {
-    const parts = str.split('/')
-    if (parts.length === 3) {
-      // Assuming DD/MM/YYYY
-      const day = parts[0].padStart(2, '0')
-      const month = parts[1].padStart(2, '0')
-      const year = parts[2]
-      return `${year}-${month}-${day}`
+  let str = String(dateStr).trim()
+  if (!str || str === '-') return null
+  str = str.replace(/\s+.*$/, '') // drop time if Excel includes it
+
+  const iso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (iso) {
+    const year = iso[1]
+    const month = iso[2].padStart(2, '0')
+    const day = iso[3].padStart(2, '0')
+    const date = new Date(`${year}-${month}-${day}T00:00:00`)
+    return Number.isNaN(date.getTime()) ? null : `${year}-${month}-${day}`
+  }
+
+  const slash = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
+  if (slash) {
+    const day = slash[1].padStart(2, '0')
+    const month = slash[2].padStart(2, '0')
+    const year = expandYear(slash[3])
+    const date = new Date(`${year}-${month}-${day}T00:00:00`)
+    if (Number.isNaN(date.getTime())) return null
+    if (date.getFullYear() !== Number(year) || date.getMonth() + 1 !== Number(month) || date.getDate() !== Number(day)) {
+      return null
     }
+    return `${year}-${month}-${day}`
   }
 
   return null
 }
+
+// Helper to convert DD/MM/YYYY (and Excel short dates) to YYYY-MM-DD
+const formatDateForDB = (dateStr) => parseFlexibleDate(dateStr)
 
 // Map App State (Vietnamese) -> Supabase DB columns (English)
 export const mapAppToUser = (data) => {
   if (!data) return null
   return {
     // id field is usually handled by Supabase or passed separately for updates
-    employee_id: data.employeeId || data.employee_id || data.username || '',
+    employee_id: (data.employeeId || data.employee_id || '').trim() || null,
     name: data.ho_va_ten || '',
-    email: data.email || '',
+    email: (data.email || '').trim() || null,
     phone: data.sđt || data.sdt || '',
     branch: data.chi_nhanh || '',
     department: data.bo_phan || '',
     position: data.vi_tri || '',
     employment_status: data.trang_thai || '',
+    status: data.tinh_trang || data.status || '',
     shift: data.ca_lam_viec || '',
     join_date: formatDateForDB(data.ngay_vao_lam),
     official_date: formatDateForDB(data.ngay_lam_chinh_thuc),
@@ -154,6 +189,9 @@ export const mapAppToUser = (data) => {
     dob: formatDateForDB(data.ngay_sinh),
     gender: data.gioi_tinh || '',
     marital_status: data.tinh_trang_hon_nhan || '',
+    notes: data.ghi_chu || data.notes || '',
+    salary_mechanism: data.co_che_luong || '',
+    total_salary: data.tong_luong || '',
     avatar_url: data.avatarDataUrl || data.avatarUrl || data.avatar || '',
     documents: Array.isArray(data.files) ? data.files.map(f => ({
       name: f.name || '',
@@ -167,9 +205,8 @@ export const mapAppToUser = (data) => {
       ...(!f.attachments && f.data ? { data: f.data, type: f.type || '' } : {})
     })) : [],
     images: Array.isArray(data.images) ? data.images : [],
-    // Add default fields if creating new user, though usually handled by DB defaults
     role: data.role || 'user',
-    username: data.username || data.email?.split('@')[0] || data.employeeId || ''
+    username: (data.username || data.employeeId || data.employee_id || '').trim() || null,
   }
 }
 

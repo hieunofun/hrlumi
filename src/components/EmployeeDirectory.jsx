@@ -1,42 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import EmployeeModal from './EmployeeModal'
 import StatusHistoryView from './StatusHistoryView'
-import { supabase } from '../services/supabase'
-import { fbGet, fbUpdate } from '../services/firebase'
 import { formatDateDisplay } from '../utils/helpers'
 
 const getName = (employee) => employee.ho_va_ten || employee.name || employee.Tên || 'Chưa cập nhật'
-const getStatus = (employee) => employee.trang_thai || employee.status || 'Chưa cập nhật'
+const getTinhTrang = (employee) => String(employee?.tinh_trang || employee?.status || '').trim()
+const isResigned = (employee) =>
+    String(employee?.trang_thai || '').trim() === 'Nghỉ việc' || getTinhTrang(employee) === 'Nghỉ việc'
 
 function EmployeeDirectory({
     employees, filteredEmployees, activeTab, setActiveTab, searchTerm, setSearchTerm,
     filterBranch, setFilterBranch,
     filterDept, setFilterDept, filterStatus, setFilterStatus, filterContract, setFilterContract,
     selectedEmployee, setSelectedEmployee, isModalOpen, setIsModalOpen, isReadOnly, setIsReadOnly,
-    onReload, onExport, onImport
+    onReload, onExport, onDownloadTemplate, onImport, onDelete
 }) {
     const importInputRef = useRef(null)
-    const [codeEdits, setCodeEdits] = useState({})
-    const [syncing, setSyncing] = useState(false)
+    const [openMenu, setOpenMenu] = useState(null)
 
     const activeEmployees = useMemo(
-        () => employees.filter(employee => getStatus(employee) !== 'Nghỉ việc'),
+        () => employees.filter(employee => !isResigned(employee)),
         [employees]
     )
-
-    useEffect(() => {
-        setCodeEdits((prev) => {
-            const cleaned = {}
-            Object.entries(prev).forEach(([id, value]) => {
-                const emp = employees.find((e) => String(e.id) === String(id))
-                if (!emp) return
-                if (String(value).trim() !== String(emp.employeeId || '').trim()) {
-                    cleaned[id] = value
-                }
-            })
-            return cleaned
-        })
-    }, [employees])
 
     const daysUntil = (value) => {
         if (!value) return null
@@ -54,8 +39,8 @@ function EmployeeDirectory({
     const contracts = [...new Set(activeEmployees.map(employee => employee.loai_hop_dong || employee.contractType).filter(Boolean))].sort()
     const stats = [
         ['Tổng nhân sự', activeEmployees.length, 'fa-users', 'blue'],
-        ['Nhân sự thử việc', activeEmployees.filter(e => getStatus(e) === 'Thử việc').length, 'fa-user-clock', 'orange'],
-        ['Nhân sự chính thức', activeEmployees.filter(e => getStatus(e) === 'Chính thức').length, 'fa-user-check', 'green'],
+        ['Nhân sự thử việc', activeEmployees.filter(e => getTinhTrang(e) === 'Thử việc').length, 'fa-user-clock', 'orange'],
+        ['Nhân sự chính thức', activeEmployees.filter(e => getTinhTrang(e) === 'Chính thức').length, 'fa-user-check', 'green'],
         ['Hợp đồng sắp hết hạn', expiring.length, 'fa-file-circle-exclamation', 'red'],
         ['Hồ sơ thiếu giấy tờ', activeEmployees.filter(e => !e.cccd || !e.so_bhxh || !e.ngay_sinh).length, 'fa-folder-open', 'purple'],
         ['Đi muộn nhiều', activeEmployees.filter(e => Number(e.so_lan_di_muon || 0) > 3).length, 'fa-clock', 'red'],
@@ -64,91 +49,19 @@ function EmployeeDirectory({
         ['Sắp đến thâm niên', activeEmployees.filter(e => { const d = new Date(e.ngay_vao_lam); return !Number.isNaN(d.getTime()) && d.getMonth() === month }).length, 'fa-award', 'teal']
     ]
 
-    const pendingCodeChanges = useMemo(() => {
-        return employees
-            .filter((emp) => emp?.id && codeEdits[emp.id] !== undefined)
-            .map((emp) => {
-                const nextCode = String(codeEdits[emp.id] ?? '').trim()
-                const prevCode = String(emp.employeeId || '').trim()
-                return { emp, nextCode, prevCode }
-            })
-            .filter(({ nextCode, prevCode }) => nextCode !== prevCode)
-    }, [employees, codeEdits])
-
     const openEmployee = (employee, readOnly = true) => {
+        setOpenMenu(null)
         setSelectedEmployee(employee)
         setIsReadOnly(readOnly)
         setIsModalOpen(true)
     }
 
-    const getDisplayCode = (employee) => {
-        if (employee?.id && codeEdits[employee.id] !== undefined) return codeEdits[employee.id]
-        return employee.employeeId || ''
-    }
-
-    const handleCodeChange = (employee, value) => {
-        if (!employee?.id) return
-        setCodeEdits((prev) => ({ ...prev, [employee.id]: value }))
-    }
-
-    const syncEmployeeCodes = async () => {
-        if (pendingCodeChanges.length === 0) {
-            alert('Không có mã nhân viên nào thay đổi để đồng bộ.')
-            return
-        }
-
-        if (!confirm(`Đồng bộ ${pendingCodeChanges.length} mã nhân viên?\nHệ thống sẽ cập nhật hồ sơ và đồng bộ sang dữ liệu chấm công liên quan.`)) {
-            return
-        }
-
-        setSyncing(true)
-        try {
-            const errors = []
-            const changeById = new Map(
-                pendingCodeChanges.map(({ emp, nextCode }) => [String(emp.id), nextCode])
-            )
-            for (const { emp, nextCode } of pendingCodeChanges) {
-                const { error } = await supabase
-                    .from('users')
-                    .update({ employee_id: nextCode })
-                    .eq('id', emp.id)
-                if (error) {
-                    errors.push(`${getName(emp)}: ${error.message}`)
-                }
-            }
-
-            // Sync employeeCode on attendance logs linked by system employee id
-            try {
-                const logsData = await fbGet('hr/attendanceLogs')
-                if (logsData && typeof logsData === 'object') {
-                    const updates = Object.entries(logsData).filter(([, log]) =>
-                        log && changeById.has(String(log.employeeId))
-                    )
-                    await Promise.all(
-                        updates.map(([logId, log]) =>
-                            fbUpdate(`hr/attendanceLogs/${logId}`, {
-                                employeeCode: changeById.get(String(log.employeeId))
-                            })
-                        )
-                    )
-                }
-            } catch (syncErr) {
-                console.warn('Không đồng bộ được sang chấm công:', syncErr)
-            }
-
-            if (errors.length) {
-                alert(`Đã đồng bộ một phần.\nLỗi:\n${errors.slice(0, 8).join('\n')}`)
-            } else {
-                alert(`Đã đồng bộ ${pendingCodeChanges.length} mã nhân viên.`)
-            }
-            setCodeEdits({})
-            await onReload?.()
-        } catch (error) {
-            alert('Lỗi đồng bộ: ' + (error.message || error))
-        } finally {
-            setSyncing(false)
-        }
-    }
+    useEffect(() => {
+        if (!openMenu) return undefined
+        const close = () => setOpenMenu(null)
+        document.addEventListener('click', close)
+        return () => document.removeEventListener('click', close)
+    }, [openMenu])
 
     return (
         <div className="employees-page">
@@ -158,15 +71,7 @@ function EmployeeDirectory({
                     <p>Quản lý tập trung hồ sơ, hợp đồng và tình trạng nhân viên</p>
                 </div>
                 <div className="employees-hero__actions">
-                    <button
-                        className="btn btn-success"
-                        onClick={syncEmployeeCodes}
-                        disabled={syncing || pendingCodeChanges.length === 0}
-                        title="Lưu tất cả mã nhân viên đã sửa"
-                    >
-                        <i className={`fas ${syncing ? 'fa-spinner fa-spin' : 'fa-sync'}`}></i>
-                        {syncing ? 'Đang đồng bộ...' : `Đồng bộ mã NV${pendingCodeChanges.length ? ` (${pendingCodeChanges.length})` : ''}`}
-                    </button>
+                    <button className="btn" onClick={onDownloadTemplate}><i className="fas fa-download"></i> Tải mẫu Excel</button>
                     <button className="btn" onClick={onExport}><i className="fas fa-file-excel"></i> Xuất Excel</button>
                     <button className="btn" onClick={() => importInputRef.current?.click()}><i className="fas fa-file-import"></i> Nhập Excel</button>
                     <input ref={importInputRef} className="employees-file-input" type="file" accept=".xlsx,.xls,.csv" onChange={onImport} />
@@ -176,7 +81,11 @@ function EmployeeDirectory({
 
             <section className="hr-overview">
                 {stats.map(([label, value, icon, tone]) => (
-                    <button key={label} className={`hr-stat hr-stat--${tone}`} onClick={() => label === 'Hợp đồng sắp hết hạn' && setActiveTab('expiring')}>
+                    <button key={label} className={`hr-stat hr-stat--${tone}`} onClick={() => {
+                        if (label === 'Hợp đồng sắp hết hạn') setActiveTab('expiring')
+                        if (label === 'Nhân sự thử việc') { setActiveTab('list'); setFilterStatus('Thử việc') }
+                        if (label === 'Nhân sự chính thức') { setActiveTab('list'); setFilterStatus('Chính thức') }
+                    }}>
                         <span className="hr-stat__icon"><i className={`fas ${icon}`}></i></span>
                         <span><strong>{value}</strong><small>{label}</small></span>
                     </button>
@@ -191,7 +100,7 @@ function EmployeeDirectory({
 
             {activeTab === 'history' ? <StatusHistoryView employees={employees} onDataChange={onReload} /> : <>
                 <section className="employees-filter-card">
-                    <label className="employees-search"><i className="fas fa-search"></i><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm theo mã, họ tên, email, số điện thoại..." /></label>
+                    <label className="employees-search"><i className="fas fa-search"></i><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Tìm theo họ tên, email, số điện thoại..." /></label>
                     <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
                         <option value="">Tất cả chi nhánh</option>
                         {branches.map(value => <option key={value}>{value}</option>)}
@@ -212,38 +121,67 @@ function EmployeeDirectory({
                 <section className="employees-table-card">
                     <div className="employees-table-card__caption">
                         <span>Hiển thị <strong>{filteredEmployees.length}</strong> nhân viên</span>
-                        <small>
-                            {pendingCodeChanges.length > 0
-                                ? `${pendingCodeChanges.length} mã NV đã sửa — bấm Đồng bộ để lưu tất cả`
-                                : 'Sửa mã NV ngay trên bảng, rồi bấm Đồng bộ'}
-                        </small>
                     </div>
                     <div className="employees-table-wrap">
                         <table className="employees-table">
-                            <thead><tr><th>Mã nhân viên</th><th>Nhân viên</th><th>Phòng ban</th><th>Chức danh</th><th>Ngày vào làm</th><th>Loại hợp đồng</th><th>Trạng thái</th><th></th></tr></thead>
+                            <thead><tr><th>Nhân viên</th><th>Phòng ban</th><th>Chức danh</th><th>Ngày vào làm</th><th>Loại hợp đồng</th><th>Tình trạng</th><th></th></tr></thead>
                             <tbody>{filteredEmployees.map((employee, index) => {
                                 const name = getName(employee)
-                                const status = getStatus(employee)
+                                const status = getTinhTrang(employee)
                                 const avatar = employee.avatarDataUrl || employee.avatarUrl || employee.avatar
                                 const days = daysUntil(employee.ngay_het_han || employee.contractEndDate || employee.ngay_het_han_hop_dong)
-                                const isDirty = employee?.id && codeEdits[employee.id] !== undefined
-                                    && String(codeEdits[employee.id]).trim() !== String(employee.employeeId || '').trim()
                                 return <tr key={employee.id || index} onClick={() => openEmployee(employee)}>
-                                    <td onClick={(e) => e.stopPropagation()}>
-                                        <input
-                                            className={`employee-code-input ${isDirty ? 'is-dirty' : ''}`}
-                                            value={getDisplayCode(employee)}
-                                            onChange={(e) => handleCodeChange(employee, e.target.value)}
-                                            placeholder={`NV${String(index + 1).padStart(4, '0')}`}
-                                            title="Sửa mã nhân viên"
-                                        />
-                                    </td>
                                     <td><div className="employee-identity"><span className="employee-avatar">{avatar ? <img src={avatar} alt="" /> : name.charAt(0)}</span><span><strong>{name}</strong><small>{employee.email || employee.sdt || employee.sđt || 'Chưa có thông tin liên hệ'}</small></span></div></td>
                                     <td>{employee.bo_phan || 'Chưa phân bổ'}</td><td>{employee.vi_tri || 'Chưa cập nhật'}</td>
                                     <td>{formatDateDisplay(employee.ngay_vao_lam) || '—'}</td>
                                     <td><span className="contract-cell">{employee.loai_hop_dong || employee.contractType || 'Chưa cập nhật'}{days !== null && days >= 0 && days <= 60 && <small>Còn {days} ngày</small>}</span></td>
                                     <td><span className={`employee-status ${status === 'Chính thức' ? 'success' : status === 'Thử việc' ? 'warning' : status === 'Nghỉ việc' ? 'danger' : ''}`}><i></i>{status === 'Nghỉ việc' ? 'Đã nghỉ' : status}</span></td>
-                                    <td><button className="employee-row-menu" onClick={event => { event.stopPropagation(); openEmployee(employee, false) }}><i className="fas fa-ellipsis"></i></button></td>
+                                    <td className="employee-row-actions" onClick={(event) => event.stopPropagation()}>
+                                        <button
+                                            className="employee-row-menu"
+                                            title="Thao tác"
+                                            onClick={(event) => {
+                                                event.stopPropagation()
+                                                const rowKey = employee.id || `row-${index}`
+                                                if (openMenu?.id === rowKey) {
+                                                    setOpenMenu(null)
+                                                    return
+                                                }
+                                                const rect = event.currentTarget.getBoundingClientRect()
+                                                setOpenMenu({
+                                                    id: rowKey,
+                                                    top: rect.bottom + 4,
+                                                    right: window.innerWidth - rect.right
+                                                })
+                                            }}
+                                        >
+                                            <i className="fas fa-ellipsis"></i>
+                                        </button>
+                                        {openMenu?.id === (employee.id || `row-${index}`) && (
+                                            <div
+                                                className="employee-row-dropdown"
+                                                style={{ top: openMenu.top, right: openMenu.right }}
+                                                onClick={(event) => event.stopPropagation()}
+                                            >
+                                                <button type="button" onClick={() => openEmployee(employee, true)}>
+                                                    <i className="fas fa-eye"></i> Xem
+                                                </button>
+                                                <button type="button" onClick={() => openEmployee(employee, false)}>
+                                                    <i className="fas fa-edit"></i> Sửa
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="danger"
+                                                    onClick={() => {
+                                                        setOpenMenu(null)
+                                                        onDelete?.(employee.id, name)
+                                                    }}
+                                                >
+                                                    <i className="fas fa-trash"></i> Xóa
+                                                </button>
+                                            </div>
+                                        )}
+                                    </td>
                                 </tr>
                             })}</tbody>
                         </table>
