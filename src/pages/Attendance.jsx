@@ -20,6 +20,7 @@ import {
 } from '../utils/approvalPolicy'
 import { TAX_CONFIG } from '../utils/constants'
 import { calculateProgressiveTax, formatMoney, normalizeString } from '../utils/helpers'
+import { downloadAttendanceFromGoldenTemplate } from '../utils/attendanceExcel'
 
 const buildAttendanceEmployeeFilterKey = (name, code) => {
   const normalizedCode = normalizeString(code)
@@ -1302,70 +1303,14 @@ function Attendance() {
       return
     }
 
-    const dataToExport = filteredAttendanceLogs
-
-    const exportData = dataToExport.map((log, idx) => {
-      const employee = employees.find(e => e.id === log.employeeId)
-      const dateStr = log.date ? String(log.date).slice(0, 10) : ''
-      const hours = Number(log.hours ?? log.soGio ?? log.gio ?? 0) || 0
-      const gioPlus = Number(log.gioPlus ?? 0) || 0
-      return {
-        'STT': idx + 1,
-        'Mã N.Viên': log.employeeCode || employee?.employeeId || log.employeeId || '',
-        'Tên nhân viên': log.employeeName || employee?.ho_va_ten || employee?.name || '',
-        'Tên theo máy chấm công': log.machineName || log.tenTheoMayChamCong || log.employeeName || employee?.ho_va_ten || employee?.name || '',
-        'Phòng ban': log.department || employee?.bo_phan || '',
-        'Chức vụ': log.position || employee?.vi_tri || '',
-        'Ngày': dateStr,
-        'Thứ': log.dayOfWeek || dayOfWeekFromDate(dateStr) || '',
-        'Vào': formatTimeHM(log.checkIn || log.vao),
-        'Ra': formatTimeHM(log.checkOut || log.ra),
-        'Công': log.cong ?? '',
-        'Giờ': hours || '',
-        'Công+': log.congPlus ?? '',
-        'Giờ+': gioPlus || '',
-        'Vào trễ': log.lateMinutes ?? log.vaoTre ?? '',
-        'Ra sớm': log.earlyMinutes ?? log.raSom ?? '',
-        'TC1': log.tc1 ?? '',
-        'TC2': log.tc2 ?? '',
-        'TC3': log.tc3 ?? '',
-        'Tên ca': log.shiftName || log.tenCa || '',
-        'Kí hiệu': log.kyHieu || log.status || '',
-        'Kí hiệu+': log.kyHieuPlus || '',
-        'Tổng giờ': log.tongGio ?? (hours + gioPlus)
-      }
-    })
-
-    const detailHeaders = [
-      'STT', 'Mã N.Viên', 'Tên nhân viên', 'Tên theo máy chấm công', 'Phòng ban',
-      'Chức vụ', 'Ngày', 'Thứ', 'Vào', 'Ra', 'Công', 'Giờ', 'Công+', 'Giờ+',
-      'Vào trễ', 'Ra sớm', 'TC1', 'TC2', 'TC3', 'Tên ca', 'Kí hiệu', 'Kí hiệu+',
-      'Tổng giờ'
-    ]
-    const detailSheet = exportData.length
-      ? XLSX.utils.json_to_sheet(exportData)
-      : XLSX.utils.aoa_to_sheet([detailHeaders])
-    detailSheet['!cols'] = detailHeaders.map((header) => ({
-      wch: Math.max(10, Math.min(28, header.length + 4))
-    }))
-    if (detailSheet['!ref']) detailSheet['!autofilter'] = { ref: detailSheet['!ref'] }
-
-    const workbook = XLSX.utils.book_new()
-    const reportMeta = appendAttendanceSummarySheet(
-      workbook,
-      filteredAttendanceSummary,
-      filterAttendanceMonth,
-      attendanceSummary
-    )
-    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Chi tiết chấm công')
     try {
-      await downloadAttendanceWorkbook(
-        workbook,
-        `Bao_cao_cham_cong_${filterAttendanceMonth}_CO_DANH_SACH_CHON.xlsx`,
-        reportMeta
-      )
+      await downloadAttendanceFromGoldenTemplate({
+        rows: filteredAttendanceSummary,
+        month: filterAttendanceMonth,
+        fileName: `BANG_CONG_${filterAttendanceMonth}.xlsx`
+      })
     } catch (error) {
-      console.error('Không thể tạo danh sách lựa chọn trong Excel:', error)
+      console.error('Không thể xuất báo cáo theo golden template:', error)
       alert('Không thể xuất báo cáo Excel: ' + error.message)
     }
   }
