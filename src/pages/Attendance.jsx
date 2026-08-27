@@ -1297,7 +1297,7 @@ function Attendance() {
   }
 
   const handleOpenAttendancePreview = () => {
-    window.open('/bang-cong-preview.html', '_blank', 'noopener,noreferrer')
+    window.open('/bang-cong-preview', '_blank', 'noopener,noreferrer')
   }
 
   // Export Attendance Data to Excel
