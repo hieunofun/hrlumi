@@ -22,4 +22,14 @@
 .my-attendance__table-wrap .is-warning { color: #b42318; font-weight: 700; background: #fff7ed; }
 .my-attendance__empty { padding: 30px !important; color: #64748b; }
 @media (max-width: 1050px) { .my-attendance__stats { grid-template-columns: repeat(3, 1fr); } .my-attendance__identity { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 640px) { .my-attendance__stats { grid-template-columns: repeat(2, 1fr); } .my-attendance__identity { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .my-attendance__header { align-items: stretch; flex-direction: column; gap: 14px; }
+  .my-attendance__header label { width: 100%; }
+  .my-attendance__header select { min-height: 46px; font-size: 1rem; }
+  .my-attendance__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .my-attendance__stats .card { min-height: 90px; padding: 13px; }
+  .my-attendance__identity { grid-template-columns: 1fr; }
+  .my-attendance__identity div { padding: 13px 15px; border-right: 0; border-bottom: 1px solid #e2e8f0; }
+  .my-attendance__table-card h3 { padding: 14px; }
+  .my-attendance__table-wrap th, .my-attendance__table-wrap td { padding: 10px 11px; font-size: .92rem; }
+}

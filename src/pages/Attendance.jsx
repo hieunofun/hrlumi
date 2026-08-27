@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import XLSX from 'xlsx-js-style'
 import AttendanceImportModal from '../components/AttendanceImportModal'
 import AttendanceModal, { dayOfWeekFromDate, formatTimeHM } from '../components/AttendanceModal'
+import AttendanceSettingsModal from '../components/AttendanceSettingsModal'
 import DependentModal from '../components/DependentModal'
 import InsuranceModal from '../components/InsuranceModal'
 import PayrollDetailModal from '../components/PayrollDetailModal'
@@ -601,6 +602,7 @@ function Attendance() {
   // Modal states
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isAttendanceSettingsOpen, setIsAttendanceSettingsOpen] = useState(false)
   const [isPayrollDetailModalOpen, setIsPayrollDetailModalOpen] = useState(false)
   const [isInsuranceModalOpen, setIsInsuranceModalOpen] = useState(false)
   const [isTaxModalOpen, setIsTaxModalOpen] = useState(false)
@@ -1569,6 +1571,14 @@ function Attendance() {
             >
               <i className="fas fa-robot"></i>
               AI đối soát & Import
+            </button>
+            <button
+              className="btn"
+              onClick={() => setIsAttendanceSettingsOpen(true)}
+              title="Cài đặt giờ Check-in và Check-out chuẩn"
+            >
+              <i className="fas fa-gear"></i>
+              Cài đặt giờ
             </button>
             <button
               className="btn btn-primary"
@@ -2650,6 +2660,11 @@ function Attendance() {
         }}
         onSave={loadData}
         readOnly={isAttendanceReadOnly}
+      />
+
+      <AttendanceSettingsModal
+        isOpen={isAttendanceSettingsOpen}
+        onClose={() => setIsAttendanceSettingsOpen(false)}
       />
 
       <PayrollDetailModal

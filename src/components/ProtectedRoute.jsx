@@ -9,7 +9,9 @@ function ProtectedRoute({ allowedRoles, children }) {
   if (!user) {
     return <Navigate to={allowedRoles ? '/login' : '/employee-login'} state={{ from: location }} replace />
   }
-  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/bang-cong" replace />
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={user.role === 'user' ? '/bang-cong' : '/dashboard'} replace />
+  }
   return children || <Outlet />
 }
 

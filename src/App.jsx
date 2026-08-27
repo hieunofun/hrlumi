@@ -16,6 +16,7 @@ const Honor = lazy(() => import('./pages/Honor'))
 const KPI = lazy(() => import('./pages/KPI'))
 const Login = lazy(() => import('./pages/Login'))
 const MyAttendance = lazy(() => import('./pages/MyAttendance'))
+const OnlineAttendance = lazy(() => import('./pages/OnlineAttendance'))
 const Recruitment = lazy(() => import('./pages/Recruitment'))
 const Salary = lazy(() => import('./pages/Salary'))
 const Tasks = lazy(() => import('./pages/Tasks'))
@@ -30,9 +31,10 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/employee-login" element={<EmployeeLogin />} />
-          <Route element={<ProtectedRoute />}>
+          <Route element={<ProtectedRoute allowedRoles={['user']} />}>
             <Route element={<AppLayout />}>
               <Route path="/bang-cong" element={<MyAttendance />} />
+              <Route path="/cham-cong-online" element={<OnlineAttendance />} />
             </Route>
           </Route>
           <Route element={<ProtectedRoute allowedRoles={STAFF_ROLES} />}>

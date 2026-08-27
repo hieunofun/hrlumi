@@ -1,0 +1,35 @@
+.online-attendance { width: min(100%, 760px); margin: 0 auto; }
+.online-attendance__header { align-items: flex-end; }
+.online-attendance__header p { margin: 6px 0 0; color: #64748b; }
+.online-attendance__state { padding: 32px; text-align: center; color: #64748b; }
+.online-attendance__card { padding: 24px; }
+.online-attendance__date, .online-attendance__standard { display: grid; gap: 4px; }
+.online-attendance__date span, .online-attendance__standard span { color: #64748b; font-size: .86rem; }
+.online-attendance__date strong { color: #0b3b75; font-size: 1.7rem; }
+.online-attendance__standard { margin-top: 16px; padding: 16px 18px; border-left: 4px solid #ff5a1f; border-radius: 8px; background: #f8fafc; }
+.online-attendance__standard strong { font-size: 1.35rem; }
+.online-attendance__standard small { color: #64748b; }
+.online-attendance__times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 22px 0; }
+.online-attendance__times article { display: grid; gap: 7px; padding: 20px; border: 1px solid #dbe4ee; border-radius: 12px; background: #fff; box-shadow: 0 4px 14px rgba(15, 45, 80, .07); }
+.online-attendance__times article > i { color: #94a3b8; font-size: 1.4rem; }
+.online-attendance__times article > span, .online-attendance__times article > small { color: #64748b; }
+.online-attendance__times article > strong { color: #172033; font-size: 2rem; }
+.online-attendance__times article.is-complete { border-color: #86c7a4; background: #f0fdf4; }
+.online-attendance__times article.is-complete > i { color: #168346; }
+.online-attendance__message { margin-top: 16px; padding: 12px 14px; border-radius: 8px; font-weight: 600; }
+.online-attendance__message.is-error { border: 1px solid #fecaca; color: #b42318; background: #fef2f2; }
+.online-attendance__message.is-success { border: 1px solid #bbf7d0; color: #166534; background: #f0fdf4; }
+.online-attendance__action { display: flex; width: 100%; min-height: 58px; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 10px; color: #fff; font: inherit; font-size: 1.1rem; font-weight: 750; cursor: pointer; box-shadow: 0 7px 18px rgba(11, 59, 117, .2); }
+.online-attendance__action.is-checkin { background: #168346; }
+.online-attendance__action.is-checkout { background: #0b3b75; }
+.online-attendance__action:disabled { opacity: .65; cursor: wait; }
+.online-attendance__done { display: flex; min-height: 58px; align-items: center; justify-content: center; gap: 9px; border-radius: 10px; color: #166534; background: #dcfce7; font-weight: 700; }
+@media (max-width: 600px) {
+  .online-attendance__header { align-items: stretch; flex-direction: column; gap: 14px; }
+  .online-attendance__header .btn { justify-content: center; }
+  .online-attendance__card { padding: 16px; }
+  .online-attendance__times { grid-template-columns: 1fr; }
+  .online-attendance__times article { padding: 17px; }
+  .online-attendance__times article > strong { font-size: 1.75rem; }
+  .online-attendance__action { min-height: 62px; }
+}

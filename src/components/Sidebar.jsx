@@ -18,7 +18,10 @@ function Sidebar() {
     { path: '/honor', icon: 'fas fa-medal', label: 'Vinh danh' }
   ]
   const menuItems = user?.role === 'user'
-    ? [{ path: '/bang-cong', icon: 'fas fa-calendar-check', label: 'Bảng công' }]
+    ? [
+        { path: '/bang-cong', icon: 'fas fa-calendar-check', label: 'Bảng công' },
+        { path: '/cham-cong-online', icon: 'fas fa-mobile-screen-button', label: 'Chấm công online' }
+      ]
     : staffMenuItems
 
   return (
