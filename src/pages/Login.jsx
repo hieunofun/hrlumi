@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase } from '../services/supabase'
 
 function Login() {
     const [email, setEmail] = useState('')
@@ -9,7 +8,7 @@ function Login() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
-    const { login } = useAuth()
+    const { login, logout } = useAuth()
     const navigate = useNavigate()
     const location = useLocation()
 
@@ -21,21 +20,13 @@ function Login() {
         setLoading(true)
 
         try {
-            // Use RPC to check credentials safely (bypassing RLS)
-            const { data, error } = await supabase
-                .rpc('check_credentials', {
-                    p_email: email,
-                    p_password: password
-                })
-
-            if (error) throw error
-
-            if (!data) {
-                setError('Email hoặc mật khẩu không chính xác')
-            } else {
-                login(data)
-                navigate(from, { replace: true })
+            const profile = await login(email.trim(), password)
+            if (!['admin', 'hr', 'manager'].includes(profile?.role)) {
+                await logout()
+                setError('Tài khoản này không có quyền truy cập trang quản trị')
+                return
             }
+            navigate(from === '/' ? '/dashboard' : from, { replace: true })
         } catch (err) {
             console.error('Login error:', err)
             setError('Đã có lỗi xảy ra. Vui lòng thử lại.')

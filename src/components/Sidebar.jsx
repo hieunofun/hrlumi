@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 
 function Sidebar() {
   const location = useLocation()
+  const { user } = useAuth()
 
-  const menuItems = [
+  const staffMenuItems = [
     { path: '/dashboard', icon: 'fas fa-home', label: 'Tổng quan' },
     { path: '/employees', icon: 'fas fa-users', label: 'Hồ sơ nhân sự' },
     { path: '/recruitment', icon: 'fas fa-user-plus', label: 'Tuyển dụng' },
@@ -15,6 +17,9 @@ function Sidebar() {
     { path: '/attendance', icon: 'fas fa-clock', label: 'Chấm công' },
     { path: '/honor', icon: 'fas fa-medal', label: 'Vinh danh' }
   ]
+  const menuItems = user?.role === 'user'
+    ? [{ path: '/bang-cong', icon: 'fas fa-calendar-check', label: 'Bảng công' }]
+    : staffMenuItems
 
   return (
     <aside className="sidebar">

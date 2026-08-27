@@ -238,6 +238,20 @@ export const fbGet = async (path) => {
   return null
 }
 
+export const fbGetAttendanceByEmployee = async (employeeId) => {
+  const ownerId = String(employeeId || '').trim()
+  if (!ownerId) return null
+  const { data, error } = await supabase
+    .from('hr_records')
+    .select('id, data')
+    .eq('collection', 'attendanceLogs')
+    .contains('data', { employeeId: ownerId })
+    .order('id')
+  if (error) throw error
+  const prefix = 'attendanceLogs::'
+  return Object.fromEntries((data || []).map(row => [row.id.startsWith(prefix) ? row.id.slice(prefix.length) : row.id, row.data || {}]))
+}
+
 export const fbSet = async (path, data) => {
   const parsed = parsePath(path)
 
