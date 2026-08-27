@@ -1,4 +1,4 @@
-import { normalizeString } from './helpers.js'
+import { normalizeString } from './helpers'
 
 const COMMON_MIDDLE_NAMES = new Set(['thi', 'van'])
 

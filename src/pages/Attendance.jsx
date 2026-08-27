@@ -20,7 +20,6 @@ import {
 } from '../utils/approvalPolicy'
 import { TAX_CONFIG } from '../utils/constants'
 import { calculateProgressiveTax, formatMoney, normalizeString } from '../utils/helpers'
-import { downloadAttendanceFromGoldenTemplate } from '../utils/attendanceExcel'
 
 const buildAttendanceEmployeeFilterKey = (name, code) => {
   const normalizedCode = normalizeString(code)
@@ -1296,23 +1295,8 @@ function Attendance() {
     }
   }
 
-  // Export Attendance Data to Excel
-  const handleExportAttendance = async () => {
-    if (!filterAttendanceMonth) {
-      alert('Vui lòng chọn tháng để xuất báo cáo chấm công theo nhân sự.')
-      return
-    }
-
-    try {
-      await downloadAttendanceFromGoldenTemplate({
-        rows: filteredAttendanceSummary,
-        month: filterAttendanceMonth,
-        fileName: `BANG_CONG_${filterAttendanceMonth}.xlsx`
-      })
-    } catch (error) {
-      console.error('Không thể xuất báo cáo theo golden template:', error)
-      alert('Không thể xuất báo cáo Excel: ' + error.message)
-    }
+  const handleOpenAttendancePreview = () => {
+    window.open('/bang-cong-preview.html', '_blank', 'noopener,noreferrer')
   }
 
   const handleExportAttendanceSummary = async () => {
@@ -1544,11 +1528,11 @@ function Attendance() {
           <>
             <button
               className="btn btn-success"
-              onClick={handleExportAttendance}
-              title="Xuất bảng công tháng theo mẫu và dữ liệu chấm công chi tiết"
+              onClick={handleOpenAttendancePreview}
+              title="Mở bản xem trước giao diện bảng công"
             >
-              <i className="fas fa-file-excel"></i>
-              Xuất báo cáo Excel
+              <i className="fas fa-table"></i>
+              Xem trước bảng công
             </button>
             <button
               className="btn btn-info"

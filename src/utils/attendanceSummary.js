@@ -1,4 +1,4 @@
-import { buildSourceEmployeeKey } from './attendanceMatching.js'
+import { buildSourceEmployeeKey } from './attendanceMatching'
 
 const numberValue = (value) => {
   const parsed = Number(value)
@@ -200,20 +200,10 @@ export const buildAttendanceSummary = ({
         employee?.loai_hop_dong ||
         employee?.contractType ||
         '',
-      joinDate:
-        employee?.ngay_vao_lam ||
-        employee?.joinDate ||
-        employee?.join_date ||
-        '',
       officialDate:
         employee?.ngay_lam_chinh_thuc ||
         employee?.officialDate ||
         employee?.official_date ||
-        '',
-      lastWorkingDate:
-        employee?.ngay_nghi_viec ||
-        employee?.lastWorkingDate ||
-        employee?.termination_date ||
         '',
       attendanceDays: 0,
       workdays: 0,
@@ -224,8 +214,6 @@ export const buildAttendanceSummary = ({
       lateOver30Count: 0,
       lateMinutes: 0,
       earlyCount: 0,
-      earlyUnder30Count: 0,
-      earlyOver30Count: 0,
       earlyMinutes: 0,
       missingPunchCount: 0,
       unapprovedAbsenceCount: 0,
@@ -308,8 +296,6 @@ export const buildAttendanceSummary = ({
       row.lateOver30Count += day.late && day.lateMinutes >= 30 ? 1 : 0
       row.lateMinutes += day.lateMinutes
       row.earlyCount += day.early ? 1 : 0
-      row.earlyUnder30Count += day.early && day.earlyMinutes < 30 ? 1 : 0
-      row.earlyOver30Count += day.early && day.earlyMinutes >= 30 ? 1 : 0
       row.earlyMinutes += day.earlyMinutes
       row.missingPunchCount += day.missingPunch ? 1 : 0
       row.unapprovedAbsenceCount += day.unapprovedAbsence ? 1 : 0
