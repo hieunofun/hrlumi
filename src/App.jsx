@@ -6,7 +6,6 @@ import LoadingSpinner from './components/LoadingSpinner'
 // Lazy load pages
 const Approvals = lazy(() => import('./pages/Approvals'))
 const Attendance = lazy(() => import('./pages/Attendance'))
-const AttendancePreview = lazy(() => import('./pages/AttendancePreview'))
 const Competency = lazy(() => import('./pages/Competency'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Employees = lazy(() => import('./pages/Employees'))
@@ -35,7 +34,6 @@ function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/approvals" element={<Approvals />} />
             <Route path="/attendance" element={<Attendance />} />
-            <Route path="/bang-cong-preview" element={<AttendancePreview />} />
             <Route path="/honor" element={<Honor />} />
           </Routes>
         </Layout>
