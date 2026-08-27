@@ -8,6 +8,9 @@ function Layout({ children }) {
   // Approvals keeps a mobile-first phone layout on small screens, but on desktop
   // it expands to a full-width workspace while still using the main sidebar.
   const isImmersive = location.pathname.startsWith('/approvals')
+  const isAttendancePreview = location.pathname === '/bang-cong-preview'
+
+  if (isAttendancePreview) return children
 
   return (
     <div>
@@ -23,4 +26,3 @@ function Layout({ children }) {
 }
 
 export default Layout
-

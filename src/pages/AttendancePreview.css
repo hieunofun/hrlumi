@@ -1,0 +1,57 @@
+.attendance-preview-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  padding: 18px;
+  overflow-x: hidden;
+  background: #e9ecef;
+  color: #000;
+  font-family: "Times New Roman", serif;
+}
+
+.attendance-preview-page *,
+.attendance-preview-page *::before,
+.attendance-preview-page *::after {
+  box-sizing: border-box;
+}
+
+.attendance-preview-sheet {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  background: #fff;
+  border: 1px solid #b7b7b7;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.12);
+}
+
+.attendance-preview-sheet table {
+  width: max-content;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-spacing: 0;
+  background: #fff;
+}
+
+.attendance-preview-sheet td {
+  padding: 3px 4px;
+  line-height: 1.15;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.attendance-preview-sheet tr:nth-child(n + 7):nth-child(-n + 31) td {
+  min-height: 23px;
+}
+
+@media print {
+  .attendance-preview-page {
+    padding: 0;
+    background: #fff;
+  }
+
+  .attendance-preview-sheet {
+    overflow: visible;
+    border: 0;
+    box-shadow: none;
+  }
+}
