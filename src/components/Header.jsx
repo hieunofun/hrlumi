@@ -3,8 +3,8 @@ function Header() {
   return (
     <header className="header">
       <div className="logo">
-        <img src="/logo-express-exacting.png" alt="Express & Exacting" />
-        <h1>HR Management <span>Admin</span></h1>
+        <img src="/speego-logo.png" alt="SpeeGo Logistics" />
+        <h1>SpeeGo <span>HR</span></h1>
       </div>
       <div className="user-info">
         <span>Admin</span>
@@ -16,7 +16,7 @@ function Header() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#00b14f',
+          color: '#0b3b75',
           fontWeight: 'bold'
         }}>
           A

@@ -693,16 +693,11 @@ function EmployeeModal({
                   <div className="form-group">
                     <label>Ảnh đại diện</label>
                     {avatarPreview && (
-                      <div style={{ marginBottom: '10px' }}>
+                      <div className="employee-avatar-preview-wrap">
                         <img
                           src={avatarPreview}
                           alt="Avatar"
-                          style={{
-                            width: '100px',
-                            height: '100px',
-                            objectFit: 'cover',
-                            borderRadius: '8px'
-                          }}
+                          className="employee-avatar-preview"
                         />
                       </div>
                     )}

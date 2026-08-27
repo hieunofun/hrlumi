@@ -1,4 +1,4 @@
-# LUMI GLOBAL - Quản Lý Nhân Sự (React)
+# SpeeGo Logistics - Quản Lý Nhân Sự (React)
 
 Ứng dụng quản lý nhân sự được xây dựng với React và Vite.
 
@@ -45,4 +45,3 @@ src/
 - 🔄 KPI (đang phát triển)
 - 🔄 Giao việc (đang phát triển)
 - 🔄 Chấm công & Lương (đang phát triển)
-

@@ -19,8 +19,8 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img src="/logo-express-exacting.png" alt="Express & Exacting" />
-        <span>HR Manager</span>
+        <img src="/speego-logo.png" alt="SpeeGo Logistics" />
+        <span>SpeeGo HR</span>
       </div>
 
       {menuItems.map(item => (

@@ -63,11 +63,11 @@ function Login() {
             }}>
                 <div style={{ marginBottom: '40px' }}>
                     <img
-                        src="/logo-express-exacting.png"
-                        alt="Express & Exacting"
+                        src="/speego-logo.png"
+                        alt="SpeeGo Logistics"
                         style={{
-                            width: '120px',
-                            height: '120px',
+                            width: '180px',
+                            height: '128px',
                             objectFit: 'contain',
                             borderRadius: '16px',
                             marginBottom: '20px'
@@ -94,7 +94,7 @@ function Login() {
                                 className="form-control"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="nhanvien@airport.vn"
+                                placeholder="nhanvien@speego.vn"
                                 required
                                 style={{ width: '100%', padding: '12px 12px 12px 45px', fontSize: '1rem', background: '#f8f9fa', border: '1px solid #e0e0e0' }}
                             />
@@ -132,7 +132,7 @@ function Login() {
                 </form>
 
                 <div style={{ marginTop: 'auto', paddingTop: '40px', color: '#999', fontSize: '0.9rem' }}>
-                    &copy; 2024 Airport HR Management System
+                    &copy; 2026 SpeeGo Logistics HR Management System
                 </div>
             </div>
 
@@ -171,19 +171,17 @@ function Login() {
 
                 <div style={{ position: 'relative', zIndex: 10, textAlign: 'center' }}>
                     <img
-                        src="/logo-express-exacting.png"
-                        alt="Express & Exacting"
+                        src="/speego-logo.png"
+                        alt="SpeeGo Logistics"
                         style={{
-                            width: '260px',
-                            height: '260px',
+                            width: '360px',
+                            height: '280px',
                             objectFit: 'contain',
-                            borderRadius: '24px',
                             marginBottom: '30px',
-                            boxShadow: '0 18px 45px rgba(0,0,0,0.18)'
                         }}
                     />
-                    <h1 style={{ fontSize: '3.5rem', fontWeight: '800', marginBottom: '10px', letterSpacing: '2px' }}>CẢNG HÀNG KHÔNG</h1>
-                    <h3 style={{ fontSize: '1.5rem', fontWeight: '300', opacity: 0.8, letterSpacing: '5px' }}>QUỐC TẾ</h3>
+                    <h1 style={{ fontSize: '3.5rem', fontWeight: '800', marginBottom: '10px', letterSpacing: '2px' }}>SPEEGO LOGISTICS</h1>
+                    <h3 style={{ fontSize: '1.35rem', fontWeight: '400', opacity: 0.85, letterSpacing: '4px' }}>NHANH CHÓNG · CHÍNH XÁC</h3>
 
                     <div style={{
                         width: '100px',
