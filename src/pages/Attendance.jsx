@@ -20,6 +20,7 @@ import {
 } from '../utils/approvalPolicy'
 import { TAX_CONFIG } from '../utils/constants'
 import { calculateProgressiveTax, formatMoney, normalizeString } from '../utils/helpers'
+import { downloadAttendanceFromGoldenTemplate } from '../utils/attendanceExcel'
 
 const buildAttendanceEmployeeFilterKey = (name, code) => {
   const normalizedCode = normalizeString(code)
@@ -1299,6 +1300,25 @@ function Attendance() {
     window.open('/bang-cong-preview.html', '_blank', 'noopener,noreferrer')
   }
 
+  // Export Attendance Data to Excel
+  const handleExportAttendance = async () => {
+    if (!filterAttendanceMonth) {
+      alert('Vui lòng chọn tháng để xuất báo cáo chấm công theo nhân sự.')
+      return
+    }
+
+    try {
+      await downloadAttendanceFromGoldenTemplate({
+        rows: filteredAttendanceSummary,
+        month: filterAttendanceMonth,
+        fileName: `BANG_CONG_${filterAttendanceMonth}.xlsx`
+      })
+    } catch (error) {
+      console.error('Không thể xuất báo cáo theo golden template:', error)
+      alert('Không thể xuất báo cáo Excel: ' + error.message)
+    }
+  }
+
   const handleExportAttendanceSummary = async () => {
     if (!filterAttendanceMonth) {
       alert('Vui lòng chọn tháng cần xuất báo cáo.')
@@ -1535,12 +1555,12 @@ function Attendance() {
               Xem trước bảng công
             </button>
             <button
-              className="btn btn-info"
-              onClick={downloadAttendanceTemplate}
-              title="Tải file mẫu nhập liệu"
+              className="btn btn-success"
+              onClick={handleExportAttendance}
+              title="Tải bảng công tháng theo mẫu Excel"
             >
-              <i className="fas fa-download"></i>
-              Tải mẫu
+              <i className="fas fa-file-excel"></i>
+              Tải Excel
             </button>
             <button
               className="btn btn-primary"
@@ -1569,6 +1589,14 @@ function Attendance() {
               Xóa tất cả
             </button>
             <SeedAttendanceDataButton employees={employees} onComplete={loadData} />
+            <button
+              className="btn btn-info"
+              onClick={downloadAttendanceTemplate}
+              title="Tải file mẫu nhập liệu"
+            >
+              <i className="fas fa-download"></i>
+              Tải mẫu
+            </button>
           </>
         )}
         {activeTab === 'workday_summary' && (
