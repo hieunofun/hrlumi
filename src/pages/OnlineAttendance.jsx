@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../services/supabase'
@@ -42,7 +42,7 @@ function OnlineAttendance() {
   const checkedOut = Boolean(record?.checkOut || record?.ra)
   const lateMinutes = Math.max(0, Number(record?.lateMinutes ?? record?.vaoTre ?? 0) || 0)
   const earlyMinutes = Math.max(0, Number(record?.earlyMinutes ?? record?.raSom ?? 0) || 0)
-  const standardRange = useMemo(() => `${today?.standardCheckIn || '08:00'} – ${today?.standardCheckOut || '17:30'}`, [today])
+  const standardRange = `${today?.standardCheckIn || '08:00'} - ${today?.standardCheckOut || '17:30'}`
 
   const submit = async action => {
     if (submitting) return
@@ -69,26 +69,41 @@ function OnlineAttendance() {
   return (
     <div className="online-attendance">
       <div className="page-header online-attendance__header">
-        <div><h1 className="page-title"><i className="fas fa-mobile-screen-button"></i>Chấm công online</h1><p>Xin chào {user.ho_va_ten || user.email}</p></div>
-        <Link className="btn" to="/bang-cong"><i className="fas fa-calendar-check"></i>Bảng công</Link>
+        <div><h1>Chấm công online</h1><p>{user.ho_va_ten || user.email} · {displayDate(today?.date)}</p></div>
+        <Link className="btn online-attendance__view-link" to="/bang-cong">Xem bảng công</Link>
       </div>
 
-      {loading ? <section className="card online-attendance__state">Đang lấy trạng thái hôm nay...</section> : (
-        <section className="card online-attendance__card">
-          <div className="online-attendance__date"><span>Hôm nay</span><strong>{displayDate(today?.date)}</strong></div>
-          <div className="online-attendance__standard"><span>Giờ làm chuẩn</span><strong>{standardRange}</strong><small>Giờ Việt Nam · thời gian ghi nhận từ máy chủ</small></div>
+      {loading ? <div className="online-attendance__state">Đang lấy trạng thái hôm nay...</div> : (
+        <section className="online-attendance__sheet">
+          <div className="online-attendance__workday">
+            <div><span>Ngày làm việc</span><strong>{displayDate(today?.date)}</strong></div>
+            <div><span>Ca làm việc</span><strong>{standardRange}</strong></div>
+          </div>
 
           {error && <div className="online-attendance__message is-error">{error}</div>}
           {notice && <div className="online-attendance__message is-success">{notice}</div>}
 
-          <div className="online-attendance__times">
-            <article className={checkedIn ? 'is-complete' : ''}><i className="fas fa-right-to-bracket"></i><span>Check-in</span><strong>{getTime(record?.vao || record?.checkIn)}</strong><small>Đi muộn: {lateMinutes} phút</small></article>
-            <article className={checkedOut ? 'is-complete' : ''}><i className="fas fa-right-from-bracket"></i><span>Check-out</span><strong>{getTime(record?.ra || record?.checkOut)}</strong><small>Về sớm: {earlyMinutes} phút</small></article>
+          <div className="online-attendance__punches">
+            <div className="online-attendance__punch">
+              <span>Check-in</span>
+              <strong>{checkedIn ? getTime(record?.vao || record?.checkIn) : 'Chưa chấm công'}</strong>
+              <small>{checkedIn ? (lateMinutes > 0 ? `Muộn ${lateMinutes} phút` : 'Đúng giờ') : '—'}</small>
+            </div>
+            <div className="online-attendance__punch">
+              <span>Check-out</span>
+              <strong>{checkedOut ? getTime(record?.ra || record?.checkOut) : 'Chưa check-out'}</strong>
+              <small>{checkedOut ? (earlyMinutes > 0 ? `Về sớm ${earlyMinutes} phút` : 'Đúng giờ') : '—'}</small>
+            </div>
           </div>
 
-          {!checkedIn && <button className="online-attendance__action is-checkin" type="button" disabled={submitting} onClick={() => submit('in')}><i className="fas fa-fingerprint"></i>{submitting ? 'Đang ghi nhận...' : 'Check-in'}</button>}
-          {checkedIn && !checkedOut && <button className="online-attendance__action is-checkout" type="button" disabled={submitting} onClick={() => submit('out')}><i className="fas fa-fingerprint"></i>{submitting ? 'Đang ghi nhận...' : 'Check-out'}</button>}
-          {checkedOut && <div className="online-attendance__done"><i className="fas fa-circle-check"></i>Bạn đã hoàn tất chấm công hôm nay.</div>}
+          <div className="online-attendance__footer">
+            <div className="online-attendance__actions">
+              {!checkedIn && <button className="online-attendance__action" type="button" disabled={submitting} onClick={() => submit('in')}>{submitting ? 'Đang ghi nhận...' : 'Check-in'}</button>}
+              {checkedIn && !checkedOut && <button className="online-attendance__action" type="button" disabled={submitting} onClick={() => submit('out')}>{submitting ? 'Đang ghi nhận...' : 'Check-out'}</button>}
+              {checkedOut && <div className="online-attendance__done"><span>✓</span> Đã hoàn thành chấm công hôm nay</div>}
+            </div>
+            <small>Thời gian được ghi nhận theo giờ máy chủ Việt Nam.</small>
+          </div>
         </section>
       )}
     </div>

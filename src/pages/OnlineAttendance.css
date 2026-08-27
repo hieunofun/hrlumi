@@ -1,35 +1,236 @@
-.online-attendance { width: min(100%, 760px); margin: 0 auto; }
-.online-attendance__header { align-items: flex-end; }
-.online-attendance__header p { margin: 6px 0 0; color: #64748b; }
-.online-attendance__state { padding: 32px; text-align: center; color: #64748b; }
-.online-attendance__card { padding: 24px; }
-.online-attendance__date, .online-attendance__standard { display: grid; gap: 4px; }
-.online-attendance__date span, .online-attendance__standard span { color: #64748b; font-size: .86rem; }
-.online-attendance__date strong { color: #0b3b75; font-size: 1.7rem; }
-.online-attendance__standard { margin-top: 16px; padding: 16px 18px; border-left: 4px solid #ff5a1f; border-radius: 8px; background: #f8fafc; }
-.online-attendance__standard strong { font-size: 1.35rem; }
-.online-attendance__standard small { color: #64748b; }
-.online-attendance__times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 22px 0; }
-.online-attendance__times article { display: grid; gap: 7px; padding: 20px; border: 1px solid #dbe4ee; border-radius: 12px; background: #fff; box-shadow: 0 4px 14px rgba(15, 45, 80, .07); }
-.online-attendance__times article > i { color: #94a3b8; font-size: 1.4rem; }
-.online-attendance__times article > span, .online-attendance__times article > small { color: #64748b; }
-.online-attendance__times article > strong { color: #172033; font-size: 2rem; }
-.online-attendance__times article.is-complete { border-color: #86c7a4; background: #f0fdf4; }
-.online-attendance__times article.is-complete > i { color: #168346; }
-.online-attendance__message { margin-top: 16px; padding: 12px 14px; border-radius: 8px; font-weight: 600; }
-.online-attendance__message.is-error { border: 1px solid #fecaca; color: #b42318; background: #fef2f2; }
-.online-attendance__message.is-success { border: 1px solid #bbf7d0; color: #166534; background: #f0fdf4; }
-.online-attendance__action { display: flex; width: 100%; min-height: 58px; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 10px; color: #fff; font: inherit; font-size: 1.1rem; font-weight: 750; cursor: pointer; box-shadow: 0 7px 18px rgba(11, 59, 117, .2); }
-.online-attendance__action.is-checkin { background: #168346; }
-.online-attendance__action.is-checkout { background: #0b3b75; }
-.online-attendance__action:disabled { opacity: .65; cursor: wait; }
-.online-attendance__done { display: flex; min-height: 58px; align-items: center; justify-content: center; gap: 9px; border-radius: 10px; color: #166534; background: #dcfce7; font-weight: 700; }
+.online-attendance {
+  width: 100%;
+  max-width: 860px;
+}
+
+.online-attendance__header {
+  align-items: flex-end;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d9e0e8;
+}
+
+.online-attendance__header h1 {
+  margin: 0;
+  color: #253247;
+  font-size: 1.65rem;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.online-attendance__header p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: .95rem;
+}
+
+.online-attendance__view-link {
+  min-height: 38px;
+  padding: 8px 14px;
+  border-color: #b8c3d1;
+  border-radius: 5px;
+  color: #0b3b75;
+  background: #fff;
+  font-weight: 600;
+}
+
+.online-attendance__state {
+  padding: 24px 0;
+  color: #64748b;
+}
+
+.online-attendance__sheet {
+  border: 1px solid #d5dce5;
+  border-radius: 5px;
+  background: #fff;
+}
+
+.online-attendance__workday {
+  display: flex;
+  gap: 56px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.online-attendance__workday > div {
+  display: grid;
+  gap: 3px;
+}
+
+.online-attendance__workday span,
+.online-attendance__punch > span {
+  color: #64748b;
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.online-attendance__workday strong {
+  color: #202b3c;
+  font-size: 1rem;
+}
+
+.online-attendance__punches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.online-attendance__punch {
+  display: grid;
+  min-height: 112px;
+  align-content: center;
+  gap: 6px;
+  padding: 18px 20px;
+}
+
+.online-attendance__punch + .online-attendance__punch {
+  border-left: 1px solid #e5e7eb;
+}
+
+.online-attendance__punch strong {
+  color: #1f2937;
+  font-size: 1.45rem;
+  font-weight: 650;
+}
+
+.online-attendance__punch small {
+  min-height: 18px;
+  color: #64748b;
+  font-size: .86rem;
+}
+
+.online-attendance__message {
+  margin: 12px 20px 0;
+  padding: 9px 11px;
+  border-radius: 4px;
+  font-size: .9rem;
+  font-weight: 600;
+}
+
+.online-attendance__message.is-error {
+  border: 1px solid #fecaca;
+  color: #b42318;
+  background: #fff7f7;
+}
+
+.online-attendance__message.is-success {
+  border: 1px solid #b7dfc7;
+  color: #166534;
+  background: #f3faf5;
+}
+
+.online-attendance__footer {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 20px;
+}
+
+.online-attendance__footer > small {
+  color: #7a8492;
+  font-size: .8rem;
+}
+
+.online-attendance__actions {
+  flex: 0 0 auto;
+}
+
+.online-attendance__action {
+  width: 160px;
+  min-height: 40px;
+  padding: 9px 18px;
+  border: 1px solid #0b3b75;
+  border-radius: 5px;
+  color: #fff;
+  background: #0b3b75;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.online-attendance__action:hover {
+  border-color: #062b59;
+  background: #062b59;
+}
+
+.online-attendance__action:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+.online-attendance__done {
+  color: #166534;
+  font-size: .92rem;
+  font-weight: 650;
+}
+
+.online-attendance__done span {
+  margin-right: 4px;
+}
+
 @media (max-width: 600px) {
-  .online-attendance__header { align-items: stretch; flex-direction: column; gap: 14px; }
-  .online-attendance__header .btn { justify-content: center; }
-  .online-attendance__card { padding: 16px; }
-  .online-attendance__times { grid-template-columns: 1fr; }
-  .online-attendance__times article { padding: 17px; }
-  .online-attendance__times article > strong { font-size: 1.75rem; }
-  .online-attendance__action { min-height: 62px; }
+  .online-attendance__header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .online-attendance__header h1 {
+    font-size: 1.4rem;
+  }
+
+  .online-attendance__view-link {
+    width: fit-content;
+    min-height: 40px;
+  }
+
+  .online-attendance__workday {
+    gap: 24px;
+    justify-content: space-between;
+    padding: 13px 14px;
+  }
+
+  .online-attendance__workday > div:last-child {
+    text-align: right;
+  }
+
+  .online-attendance__punches {
+    grid-template-columns: 1fr;
+  }
+
+  .online-attendance__punch {
+    min-height: 92px;
+    padding: 15px 14px;
+  }
+
+  .online-attendance__punch + .online-attendance__punch {
+    border-top: 1px solid #e5e7eb;
+    border-left: 0;
+  }
+
+  .online-attendance__punch strong {
+    font-size: 1.3rem;
+  }
+
+  .online-attendance__message {
+    margin-right: 14px;
+    margin-left: 14px;
+  }
+
+  .online-attendance__footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .online-attendance__action {
+    width: min(100%, 220px);
+    min-height: 46px;
+  }
 }

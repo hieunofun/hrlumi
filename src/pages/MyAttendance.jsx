@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { fbGetAttendanceByEmployee } from '../services/firebase'
 import { buildAttendanceSummary } from '../utils/attendanceSummary'
@@ -46,7 +47,7 @@ function MyAttendance() {
     <div className="my-attendance">
       <div className="page-header my-attendance__header">
         <div><h1 className="page-title"><i className="fas fa-calendar-check"></i>Bảng công</h1><p>Thông tin chấm công của {user.ho_va_ten || user.email}</p></div>
-        <label><span>Tháng</span><select value={month} onChange={event => setMonth(event.target.value)}>{months.length === 0 && <option>{month}</option>}{months.map(value => <option key={value}>{value}</option>)}</select></label>
+        <div className="my-attendance__header-actions"><Link className="btn" to="/cham-cong-online">Chấm công online</Link><label><span>Tháng</span><select value={month} onChange={event => setMonth(event.target.value)}>{months.length === 0 && <option>{month}</option>}{months.map(value => <option key={value}>{value}</option>)}</select></label></div>
       </div>
       <section className="my-attendance__identity card">
         <div><span>Mã nhân viên</span><strong>{user.employeeId || '—'}</strong></div><div><span>Họ tên</span><strong>{user.ho_va_ten || '—'}</strong></div><div><span>Phòng ban</span><strong>{user.bo_phan || '—'}</strong></div><div><span>Chức vụ</span><strong>{user.vi_tri || '—'}</strong></div>
