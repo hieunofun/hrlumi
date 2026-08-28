@@ -23,11 +23,11 @@ function Header() {
           width: '40px',
           height: '40px',
           borderRadius: '50%',
-          background: '#fff',
+          background: '#0047ab',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#0b3b75',
+          color: '#fff',
           fontWeight: 'bold'
         }}>
           {initial}

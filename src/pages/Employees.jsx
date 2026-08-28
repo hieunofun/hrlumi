@@ -4,7 +4,30 @@ import EmployeeModal from '../components/EmployeeModal'
 import StatusHistoryView from '../components/StatusHistoryView'
 import EmployeeDirectory from '../components/EmployeeDirectory'
 import { supabase } from '../services/supabase'
-import { formatDateDisplay, mapAppToUser, mapUserToApp, runUsersMutationWithSchemaFallback } from '../utils/helpers'
+import { formatDateDisplay, mapAppToUser, mapUserToApp, parseFlexibleDate, runUsersMutationWithSchemaFallback } from '../utils/helpers'
+
+const EMPLOYEE_EXCEL_HEADERS = [
+    'STT',
+    'Mã NV',
+    'Chi nhánh',
+    'Trạng thái',
+    'HỌ TÊN',
+    'Giới tính',
+    'Ngày/ tháng/ năm sinh',
+    'VỊ TRÍ',
+    'CA LÀM',
+    'TEAM',
+    'Tình trạng',
+    'Ngày vào làm',
+    'Ngày lên chính thức',
+    'Noted',
+    'Cơ chế lương',
+    'Tổng lương',
+    'SĐT',
+    'Số CCCD',
+    'Ngày cấp',
+    'Email cá nhân',
+]
 
 function Employees() {
     const [employees, setEmployees] = useState([])
@@ -56,9 +79,10 @@ function Employees() {
         let filtered = employees.filter(item => {
             if (!item) return false
 
-            const status = item.trang_thai || item.status || ''
+            const tinhTrang = item.tinh_trang || item.status || ''
+            const trangThai = item.trang_thai || ''
             // Mặc định ẩn NV nghỉ việc; chỉ hiện khi chọn lọc "Nghỉ việc"
-            if (!filterStatus && status === 'Nghỉ việc') return false
+            if (!filterStatus && (trangThai === 'Nghỉ việc' || tinhTrang === 'Nghỉ việc')) return false
 
             const nameField = item.ho_va_ten || item.name || item.Tên || ""
             const matchSearch = !searchTerm ||
@@ -72,7 +96,9 @@ function Employees() {
                 || (filterBranch === '__none__' ? !item.chi_nhanh : item.chi_nhanh === filterBranch)
             const matchDept = !filterDept
                 || (filterDept === '__none__' ? !item.bo_phan : item.bo_phan === filterDept)
-            const matchStatus = !filterStatus || status === filterStatus
+            const matchStatus = !filterStatus
+                || tinhTrang === filterStatus
+                || trangThai === filterStatus
             const contractType = item.loai_hop_dong || item.contractType || ''
             const matchContract = !filterContract || contractType === filterContract
 
@@ -142,39 +168,35 @@ function Employees() {
     }
 
     const downloadTemplate = () => {
-        const headers = [
-            'Mã nhân viên',
-            'Họ và tên',
-            'Email',
-            'SĐT',
-            'Tên đăng nhập',
-            'Vai trò',
-            'Mật khẩu',
-            'Chi nhánh',
-            'Bộ phận',
-            'Vị trí',
-            'Trạng thái',
-            'Ngày sinh',
-            'Ngày vào làm',
-            'Ngày lên chính thức',
-            'Ca làm việc',
-            'CCCD',
-            'Ngày cấp',
-            'Nơi cấp',
-            'Địa chỉ thường trú',
-            'Quê quán',
-            'Giới tính',
-            'Tình trạng hôn nhân',
-            'Link ảnh'
-        ]
-
-        // Tạo file mẫu chuẩn xlsx với 1 dòng dữ liệu để trống
-        const emptyRow = new Array(headers.length).fill('')
-        const ws = XLSX.utils.aoa_to_sheet([headers, emptyRow])
+        const ws = XLSX.utils.aoa_to_sheet([EMPLOYEE_EXCEL_HEADERS])
+        ws['!cols'] = EMPLOYEE_EXCEL_HEADERS.map((h) => ({ wch: Math.max(16, h.length + 4) }))
         const wb = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(wb, ws, 'Mau_import_nhan_su')
+        XLSX.utils.book_append_sheet(wb, ws, 'Nhan_su')
         XLSX.writeFile(wb, 'Mau_import_nhan_su.xlsx')
     }
+
+    const employeeToExcelRow = (emp, idx) => ([
+        idx + 1,
+        emp.employeeId || '',
+        emp.chi_nhanh || '',
+        emp.trang_thai || emp.status || '',
+        emp.ho_va_ten || emp.name || emp.Tên || '',
+        emp.gioi_tinh || '',
+        formatDateDisplay(emp.ngay_sinh || emp.dob) === '-' ? '' : formatDateDisplay(emp.ngay_sinh || emp.dob),
+        emp.vi_tri || '',
+        emp.ca_lam_viec || '',
+        emp.bo_phan || emp.team || '',
+        emp.tinh_trang || emp.tinh_trang_hon_nhan || '',
+        formatDateDisplay(emp.ngay_vao_lam) === '-' ? '' : formatDateDisplay(emp.ngay_vao_lam),
+        formatDateDisplay(emp.ngay_lam_chinh_thuc) === '-' ? '' : formatDateDisplay(emp.ngay_lam_chinh_thuc),
+        emp.ghi_chu || emp.notes || '',
+        emp.co_che_luong || '',
+        emp.tong_luong || '',
+        emp.sđt || emp.sdt || '',
+        emp.cccd || '',
+        formatDateDisplay(emp.ngay_cap) === '-' ? '' : formatDateDisplay(emp.ngay_cap),
+        emp.email || '',
+    ])
 
     const exportToExcel = () => {
         if (filteredEmployees.length === 0) {
@@ -182,81 +204,16 @@ function Employees() {
             return
         }
 
-        const headers = [
-            'STT',
-            'Mã nhân viên',
-            'Họ và tên',
-            'Email',
-            'SĐT',
-            'Tên đăng nhập',
-            'Vai trò',
-            'Chi nhánh',
-            'Bộ phận',
-            'Vị trí',
-            'Trạng thái',
-            'Ngày vào làm',
-            'CCCD',
-            'Ngày cấp',
-            'Nơi cấp',
-            'Quê quán',
-            'Giới tính',
-            'Tình trạng hôn nhân'
+        const rows = [
+            EMPLOYEE_EXCEL_HEADERS,
+            ...filteredEmployees.map((emp, idx) => employeeToExcelRow(emp, idx)),
         ]
-
-        const escapeCell = (val) => {
-            return String(val || '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-        }
-
-        const rowsHtml = filteredEmployees.map((emp, idx) => {
-            const cells = [
-                idx + 1,
-                emp.employeeId || '',
-                emp.ho_va_ten || emp.name || emp.Tên || '',
-                emp.email || '',
-                emp.sđt || emp.sdt || '',
-                emp.username || '',
-                emp.role || 'user',
-                emp.chi_nhanh || '',
-                emp.bo_phan || '',
-                emp.vi_tri || '',
-                emp.trang_thai || emp.status || '',
-                emp.ngay_vao_lam || '',
-                emp.cccd || '',
-                emp.ngay_cap || '',
-                emp.noi_cap || '',
-                emp.que_quan || '',
-                emp.gioi_tinh || '',
-                emp.tinh_trang_hon_nhan || ''
-            ]
-            const tds = cells.map(cell => `<td>${escapeCell(cell)}</td>`).join('')
-            return `<tr>${tds}</tr>`
-        }).join('')
-
-        const headerHtml = headers.map(h => `<th>${escapeCell(h)}</th>`).join('')
-        const tableHtml = `<table><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>`
-
-        // Bọc trong HTML để Excel mở định dạng bảng
-        const htmlContent = `
-      <html xmlns:x="urn:schemas-microsoft-com:office:excel">
-        <head><meta charset="UTF-8"></head>
-        <body>${tableHtml}</body>
-      </html>
-    `
-
-        const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-        const link = document.createElement('a')
-        const url = URL.createObjectURL(blob)
-        const date = new Date()
-        const dateStr = date.toISOString().split('T')[0]
-        link.href = url
-        link.download = `Danh_sach_nhan_su_${dateStr}.xls`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        ws['!cols'] = EMPLOYEE_EXCEL_HEADERS.map((h) => ({ wch: Math.max(16, h.length + 4) }))
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'Nhan_su')
+        const dateStr = new Date().toISOString().split('T')[0]
+        XLSX.writeFile(wb, `Danh_sach_nhan_su_${dateStr}.xlsx`)
     }
 
     // Convert Google Drive link to direct image URL
@@ -309,90 +266,190 @@ function Employees() {
         const file = event.target.files?.[0]
         if (!file) return
 
+        const normalizeHeader = (str) => {
+            return String(str || '')
+                .toLowerCase()
+                .trim()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/đ/g, 'd')
+                .replace(/[^a-z0-9]/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_|_$/g, '')
+        }
+
+        const rowHasValue = (row) =>
+            Array.isArray(row) && row.some(cell => String(cell ?? '').trim() !== '')
+
+        const sheetToRows = (sheet) =>
+            XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false, raw: false })
+
+        const readWorkbook = async () => {
+            const bytes = new Uint8Array(await file.arrayBuffer())
+            const sniff = new TextDecoder('utf-8').decode(bytes.slice(0, 512))
+            const fileName = (file.name || '').toLowerCase()
+            const looksHtml = /<html|<table|xmlns:x="urn:schemas-microsoft-com:office:excel"/i.test(sniff)
+            const looksCsv = fileName.endsWith('.csv') || fileName.endsWith('.txt')
+
+            if (looksHtml || looksCsv) {
+                return XLSX.read(new TextDecoder('utf-8').decode(bytes), { type: 'string', raw: false })
+            }
+
+            try {
+                return XLSX.read(bytes, { type: 'array', cellDates: false, raw: false })
+            } catch {
+                return XLSX.read(new TextDecoder('utf-8').decode(bytes), { type: 'string', raw: false })
+            }
+        }
+
         try {
             setLoading(true)
-            const buffer = await file.arrayBuffer()
-            const workbook = XLSX.read(buffer, { type: 'array' })
-            const sheetName = workbook.SheetNames[0]
-            const sheet = workbook.Sheets[sheetName]
-            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+            const workbook = await readWorkbook()
+            let rows = []
+            for (const name of workbook.SheetNames || []) {
+                const candidate = sheetToRows(workbook.Sheets[name]).filter(rowHasValue)
+                if (candidate.length > rows.length) rows = candidate
+            }
 
-            if (!rows || rows.length < 2) {
-                alert('File không có dữ liệu.')
+            if (!rows.length) {
+                alert('Không đọc được dữ liệu trong file. Hãy dùng .xlsx hoặc file mẫu Mau_import_nhan_su.xlsx.')
                 setLoading(false)
                 return
             }
 
-            // Normalize header: remove accents, spaces, special chars
-            const normalizeHeader = (str) => {
-                return String(str || '')
-                    .toLowerCase()
-                    .trim()
-                    .normalize('NFD')
-                    .replace(/[\u0300-\u036f]/g, '') // Remove accents
-                    .replace(/đ/g, 'd')
-                    .replace(/[^a-z0-9]/g, '_') // Replace non-alphanumeric with underscore
-                    .replace(/_+/g, '_') // Replace multiple underscores with single
-                    .replace(/^_|_$/g, '') // Remove leading/trailing underscores
+            const headerKeywords = ['ho_va_ten', 'ho_ten', 'chi_nhanh', 'email_ca_nhan', 'vi_tri', 'so_cccd', 'sdt', 'ma_nv', 'ma_nhan_vien']
+            let headerIdx = 0
+            for (let i = 0; i < Math.min(rows.length, 15); i++) {
+                const normalized = (rows[i] || []).map(h => normalizeHeader(h))
+                if (normalized.some(h => headerKeywords.some(k => h === k || h.includes(k)))) {
+                    headerIdx = i
+                    break
+                }
             }
 
-            const headers = rows[0].map(h => normalizeHeader(h))
-            const dataRows = rows.slice(1).filter(r => r.some(cell => String(cell || '').trim() !== ''))
+            const headers = (rows[headerIdx] || []).map(h => normalizeHeader(h))
+            const dataRows = rows.slice(headerIdx + 1).filter(rowHasValue)
+
+            if (!dataRows.length) {
+                alert('File chỉ có tiêu đề, chưa có dòng nhân viên.')
+                setLoading(false)
+                return
+            }
 
             console.log('📋 Headers detected:', headers)
             console.log('📊 Total data rows:', dataRows.length)
 
+            const isValidDate = (dateStr) => !dateStr || Boolean(parseFlexibleDate(dateStr))
+
+            const DATE_HEADERS = new Set([
+                'ngay_thang_nam_sinh', 'ngay_sinh', 'dob', 'birth_date',
+                'ngay_vao_lam', 'ngay_bat_dau', 'ngay_len_chinh_thuc',
+                'ngay_chinh_thuc', 'ngay_lam_chinh_thuc', 'ngay_cap'
+            ])
+
+            const formatDateValue = (cell) => {
+                if (cell == null || cell === '') return ''
+                if (cell instanceof Date && !Number.isNaN(cell.getTime())) {
+                    const dd = String(cell.getDate()).padStart(2, '0')
+                    const mm = String(cell.getMonth() + 1).padStart(2, '0')
+                    return `${dd}/${mm}/${cell.getFullYear()}`
+                }
+                if (typeof cell === 'number' && cell > 20000 && cell < 80000) {
+                    const parsed = XLSX.SSF?.parse_date_code?.(cell)
+                    if (parsed?.y && parsed?.m && parsed?.d) {
+                        const dd = String(parsed.d).padStart(2, '0')
+                        const mm = String(parsed.m).padStart(2, '0')
+                        return `${dd}/${mm}/${parsed.y}`
+                    }
+                }
+                return String(cell).trim()
+            }
+
+            const formatCell = (cell, header = '') => {
+                if (cell == null || cell === '') return ''
+                if (DATE_HEADERS.has(header) || header.startsWith('ngay_')) {
+                    return formatDateValue(cell)
+                }
+                if (typeof cell === 'number') {
+                    return Number.isInteger(cell) || Math.abs(cell - Math.round(cell)) < 1e-9
+                        ? String(Math.round(cell))
+                        : String(cell)
+                }
+                return String(cell).trim()
+            }
+
+            const pick = (rowObj, ...keys) => {
+                for (const key of keys) {
+                    const value = rowObj[key]
+                    if (value !== undefined && String(value).trim() !== '') return String(value).trim()
+                }
+                return ''
+            }
+
+            const normalizeCode = (value) => String(value || '').trim().replace(/\s+/g, '').toLowerCase()
+            const describeDbError = (error) => {
+                const msg = error?.message || error?.code || ''
+                if (/users_employee_id_unique|employee_id/i.test(msg)) return 'Mã NV đã có trên hệ thống'
+                if (/users_username_unique|username/i.test(msg)) return 'Tên đăng nhập trùng (không phải mã NV)'
+                if (/users_email_unique|email/i.test(msg)) return 'Email đã tồn tại'
+                return msg
+            }
+
+            const existingByCode = new Map()
+            employees.forEach((emp) => {
+                const code = normalizeCode(emp.employeeId)
+                if (code && emp.id) existingByCode.set(code, emp)
+            })
+
             let imported = 0
+            let updated = 0
             let skipped = 0
             const errors = []
 
-            const isValidDate = (dateStr) => {
-                if (!dateStr) return true // Empty is ok
-                // Check format DD/MM/YYYY or YYYY-MM-DD
-                const datePattern = /^(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{1,2}-\d{1,2})$/
-                if (!datePattern.test(dateStr)) return false
-
-                // Try to parse
-                const date = new Date(dateStr.includes('/') ? dateStr.split('/').reverse().join('-') : dateStr)
-                return !isNaN(date.getTime())
-            }
-
             for (let i = 0; i < dataRows.length; i++) {
                 const row = dataRows[i]
-                const rowIndex = i + 2 // Header is row 1
+                const rowIndex = headerIdx + i + 2
 
                 const rowObj = {}
                 headers.forEach((h, idx) => {
-                    rowObj[h] = row[idx] || ''
+                    if (!h) return
+                    rowObj[h] = formatCell(row[idx], h)
                 })
 
                 const payload = {
-                    employeeId: rowObj['ma_nhan_vien'] || rowObj['ma_nv'] || rowObj['employee_id'] || rowObj['code'] || '',
-                    ho_va_ten: rowObj['ho_va_ten'] || rowObj['ho_ten'] || rowObj['ten'] || rowObj['ho_va_ten'] || rowObj['name'] || '',
-                    email: rowObj['email'] || '',
-                    sđt: rowObj['sdt'] || rowObj['so_dien_thoai'] || rowObj['dien_thoai'] || rowObj['phone'] || '',
-                    username: rowObj['ten_dang_nhap'] || rowObj['username'] || rowObj['user_name'] || '',
-                    role: rowObj['vai_tro'] || rowObj['role'] || 'user',
-                    password: rowObj['mat_khau'] || rowObj['password'] || '',
-                    chi_nhanh: rowObj['chi_nhanh'] || rowObj['branch'] || '',
-                    bo_phan: rowObj['bo_phan'] || rowObj['phong_ban'] || rowObj['department'] || '',
-                    vi_tri: rowObj['vi_tri'] || rowObj['chuc_vu'] || rowObj['position'] || '',
-                    trang_thai: rowObj['trang_thai'] || rowObj['status'] || '',
-                    ngay_sinh: rowObj['ngay_sinh'] || rowObj['dob'] || rowObj['birth_date'] || '',
-                    ngay_vao_lam: rowObj['ngay_vao_lam'] || rowObj['ngay_bat_dau'] || '',
-                    ngay_lam_chinh_thuc: rowObj['ngay_len_chinh_thuc'] || rowObj['ngay_chinh_thuc'] || rowObj['ngay_lam_chinh_thuc'] || '',
-                    ca_lam_viec: rowObj['ca_lam_viec'] || rowObj['ca'] || rowObj['shift'] || '',
-                    cccd: rowObj['cccd'] || rowObj['cmnd'] || '',
-                    ngay_cap: rowObj['ngay_cap'] || '',
-                    noi_cap: rowObj['noi_cap'] || '',
-                    dia_chi_thuong_tru: rowObj['dia_chi_thuong_tru'] || rowObj['thuong_tru'] || rowObj['dia_chi'] || rowObj['address'] || '',
-                    que_quan: rowObj['que_quan'] || '',
-                    gioi_tinh: rowObj['gioi_tinh'] || rowObj['gender'] || '',
-                    tinh_trang_hon_nhan: rowObj['tinh_trang_hon_nhan'] || rowObj['hon_nhan'] || '',
-                    avatarUrl: convertDriveLink(rowObj['link_anh'] || rowObj['avatar'] || rowObj['anh'] || rowObj['hinh_anh'] || rowObj['image'] || '')
+                    employeeId: pick(rowObj, 'ma_nhan_vien', 'ma_nv', 'employee_id'),
+                    ho_va_ten: pick(rowObj, 'ho_va_ten', 'ho_ten', 'ten', 'name'),
+                    email: pick(rowObj, 'email_ca_nhan', 'email'),
+                    sđt: pick(rowObj, 'sdt', 'so_dien_thoai', 'dien_thoai', 'phone'),
+                    username: pick(rowObj, 'ten_dang_nhap', 'username', 'user_name'),
+                    role: pick(rowObj, 'vai_tro', 'role') || 'user',
+                    password: pick(rowObj, 'mat_khau', 'password'),
+                    chi_nhanh: pick(rowObj, 'chi_nhanh', 'branch'),
+                    bo_phan: pick(rowObj, 'team', 'bo_phan', 'phong_ban', 'department'),
+                    vi_tri: pick(rowObj, 'vi_tri', 'chuc_vu', 'position'),
+                    trang_thai: pick(rowObj, 'trang_thai', 'status'),
+                    tinh_trang: pick(rowObj, 'tinh_trang'),
+                    tinh_trang_hon_nhan: pick(rowObj, 'tinh_trang_hon_nhan', 'hon_nhan'),
+                    ngay_sinh: pick(rowObj, 'ngay_thang_nam_sinh', 'ngay_sinh', 'dob', 'birth_date'),
+                    ngay_vao_lam: pick(rowObj, 'ngay_vao_lam', 'ngay_bat_dau'),
+                    ngay_lam_chinh_thuc: pick(rowObj, 'ngay_len_chinh_thuc', 'ngay_chinh_thuc', 'ngay_lam_chinh_thuc'),
+                    ca_lam_viec: pick(rowObj, 'ca_lam', 'ca_lam_viec', 'ca', 'shift'),
+                    cccd: pick(rowObj, 'so_cccd', 'cccd', 'cmnd'),
+                    ngay_cap: pick(rowObj, 'ngay_cap'),
+                    noi_cap: pick(rowObj, 'noi_cap'),
+                    dia_chi_thuong_tru: pick(rowObj, 'dia_chi_thuong_tru', 'thuong_tru', 'dia_chi', 'address'),
+                    que_quan: pick(rowObj, 'que_quan'),
+                    gioi_tinh: pick(rowObj, 'gioi_tinh', 'gender'),
+                    ghi_chu: pick(rowObj, 'noted', 'note', 'ghi_chu', 'notes'),
+                    co_che_luong: pick(rowObj, 'co_che_luong'),
+                    tong_luong: pick(rowObj, 'tong_luong'),
+                    avatarUrl: convertDriveLink(pick(rowObj, 'link_anh', 'avatar', 'anh', 'hinh_anh', 'image'))
                 }
 
-                // VALIDATION
+                if (!payload.ho_va_ten) {
+                    continue
+                }
+
                 const rowErrors = []
 
                 if (!isValidDate(payload.ngay_sinh)) rowErrors.push(`Ngày sinh không hợp lệ: "${payload.ngay_sinh}" (cần dd/mm/yyyy)`)
@@ -401,7 +458,6 @@ function Employees() {
                 if (!isValidDate(payload.ngay_cap)) rowErrors.push(`Ngày cấp CCCD không hợp lệ: "${payload.ngay_cap}" (cần dd/mm/yyyy)`)
 
                 if (rowErrors.length > 0) {
-                    console.log(`⚠️ Skipped row ${rowIndex}:`, rowErrors.join(', '))
                     errors.push({
                         row: rowIndex,
                         name: payload.ho_va_ten || 'Không tên',
@@ -411,38 +467,55 @@ function Employees() {
                     continue
                 }
 
-                console.log('✅ Importing:', payload.ho_va_ten)
-
                 const dbPayload = mapAppToUser(payload)
-                dbPayload.id = crypto.randomUUID()
-                dbPayload.password = payload.password || dbPayload.password || '123456'
+                const codeKey = normalizeCode(payload.employeeId)
+                const existing = codeKey ? existingByCode.get(codeKey) : null
 
-                const mutationResult = await runUsersMutationWithSchemaFallback(
-                    (payloadToInsert) => supabase.from('users').insert([payloadToInsert]),
-                    dbPayload
-                )
+                let mutationResult
+                if (existing?.id) {
+                    mutationResult = await runUsersMutationWithSchemaFallback(
+                        (payloadToSave) => supabase.from('users').update(payloadToSave).eq('id', existing.id),
+                        dbPayload
+                    )
+                } else {
+                    dbPayload.id = crypto.randomUUID()
+                    dbPayload.password = payload.password || '123456'
+                    if (!dbPayload.username) {
+                        dbPayload.username = payload.employeeId || `nv${String(rowIndex).padStart(4, '0')}`
+                    }
+                    mutationResult = await runUsersMutationWithSchemaFallback(
+                        (payloadToInsert) => supabase.from('users').insert([payloadToInsert]),
+                        dbPayload
+                    )
+                }
+
                 const { error } = mutationResult
 
                 if (error) {
-                    console.error('❌ Insert error for:', payload.ho_va_ten, error)
+                    console.error('❌ Import error for:', payload.ho_va_ten, error)
                     errors.push({
                         row: rowIndex,
                         name: payload.ho_va_ten,
-                        reason: `Lỗi Database: ${error.message || error.code}`
+                        reason: describeDbError(error)
                     })
                     skipped++
+                } else if (existing?.id) {
+                    updated++
                 } else {
                     imported++
+                    if (codeKey) {
+                        existingByCode.set(codeKey, { id: dbPayload.id, employeeId: payload.employeeId })
+                    }
                 }
             }
 
             await loadEmployees()
-            console.log(`📊 Import summary: ${imported} imported, ${skipped} skipped`)
 
-            let message = `Đã import thành công: ${imported} nhân viên.\n`
+            let message = `Đã thêm mới ${imported} nhân viên`
+            if (updated) message += `, cập nhật ${updated} nhân viên đã có mã NV`
+            message += '.'
             if (skipped > 0) {
-                message += `Có ${skipped} dòng bị lỗi/bỏ qua:\n\n`
-                // Limit errors to first 10 to avoid huge alert
+                message += `\nCó ${skipped} dòng bị lỗi/bỏ qua:\n\n`
                 const showErrors = errors.slice(0, 10)
                 showErrors.forEach(err => {
                     message += `• Dòng ${err.row} (${err.name}): ${err.reason}\n`
@@ -673,7 +746,9 @@ function Employees() {
         setIsReadOnly={setIsReadOnly}
         onReload={loadEmployees}
         onExport={exportToExcel}
+        onDownloadTemplate={downloadTemplate}
         onImport={handleImportExcel}
+        onDelete={handleDelete}
     />
 
     /*
