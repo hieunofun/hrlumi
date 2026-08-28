@@ -12,7 +12,6 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const EmployeeLogin = lazy(() => import('./pages/EmployeeLogin'))
 const Employees = lazy(() => import('./pages/Employees'))
 const GradingPage = lazy(() => import('./pages/GradingPage'))
-const Honor = lazy(() => import('./pages/Honor'))
 const KPI = lazy(() => import('./pages/KPI'))
 const Login = lazy(() => import('./pages/Login'))
 const MyAttendance = lazy(() => import('./pages/MyAttendance'))
@@ -51,7 +50,7 @@ function App() {
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/attendance" element={<Attendance />} />
               <Route path="/bang-cong-preview" element={<AttendancePreview />} />
-              <Route path="/honor" element={<Honor />} />
+              <Route path="/honor" element={<Navigate to="/bang-cong-preview" replace />} />
             </Route>
           </Route>
         </Routes>

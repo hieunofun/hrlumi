@@ -181,6 +181,11 @@ export const buildAttendanceSummary = ({
         employee?.department ||
         log.department ||
         '',
+      position:
+        employee?.vi_tri ||
+        employee?.position ||
+        log.position ||
+        '',
       branch:
         employee?.chi_nhanh ||
         employee?.branch ||

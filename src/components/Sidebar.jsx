@@ -15,7 +15,7 @@ function Sidebar() {
     { path: '/tasks', icon: 'fas fa-tasks', label: 'Công việc' },
     { path: '/approvals', icon: 'fas fa-stamp', label: 'Đề xuất' },
     { path: '/attendance', icon: 'fas fa-clock', label: 'Chấm công' },
-    { path: '/honor', icon: 'fas fa-medal', label: 'Vinh danh' }
+    { path: '/bang-cong-preview', icon: 'fas fa-calendar-check', label: 'Bảng Công' }
   ]
   const menuItems = user?.role === 'user'
     ? [
