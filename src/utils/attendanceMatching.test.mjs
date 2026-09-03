@@ -54,3 +54,28 @@ test('still auto-matches when both employee code and name agree', () => {
   assert.equal(match.employee?.id, 'correct-profile')
   assert.equal(match.status, 'matched')
 })
+
+test('does not auto-match different Vietnamese given names with a high overall similarity', () => {
+  const employee = {
+    id: 'wrong-profile',
+    employeeId: 'LU003',
+    ho_va_ten: 'Nguyễn Thị Gấm'
+  }
+
+  const match = matchAttendanceEmployee('00012', 'Nguyễn Thị Đảm', [employee])
+
+  assert.equal(match.employee, null)
+  assert.equal(match.status, 'review')
+})
+
+test('does not choose arbitrarily when multiple profiles have the same full name', () => {
+  const employees = [
+    { id: 'profile-1', employeeId: 'LU012', ho_va_ten: 'Nguyễn Thị Lan Anh' },
+    { id: 'profile-2', employeeId: 'LU018', ho_va_ten: 'Nguyễn Thị Lan Anh' }
+  ]
+
+  const match = matchAttendanceEmployee('00004', 'Nguyễn Thị Lan Anh', employees)
+
+  assert.equal(match.employee, null)
+  assert.equal(match.status, 'review')
+})

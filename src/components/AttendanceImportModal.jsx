@@ -9,6 +9,10 @@ import {
   matchAttendanceEmployee,
   normalizeEmployeeIdentity
 } from '../utils/attendanceMatching'
+import {
+  collectAttendancePunches,
+  findAttendancePunchColumns
+} from '../utils/attendanceImport'
 
 const { read, utils, writeFile } = XLSX
 
@@ -357,8 +361,7 @@ function AttendanceImportModal({
     const posIdx = idxOf('chức vụ', 'chuc vu')
     const dateIdx = idxOf('ngày', 'ngay')
     const thuIdx = idxOf('thứ', 'thu')
-    const vaoIdx = headers.findIndex(h => h === 'vào' || h === 'vao' || h.includes('giờ vào') || h.includes('check-in'))
-    const raIdx = headers.findIndex(h => h === 'ra' || h.includes('giờ ra') || h.includes('check-out') || (h.includes('ra') && !h.includes('sớm') && !h.includes('som')))
+    const punchColumns = findAttendancePunchColumns(headers)
     const congIdx = headers.findIndex(h => h === 'công' || h === 'cong')
     const gioIdx = headers.findIndex(h => h === 'giờ' || h === 'gio')
     const congPlusIdx = idxOf('công+', 'cong+')
@@ -397,10 +400,34 @@ function AttendanceImportModal({
       const dateStr = parseDateValue(dateRaw)
       if (!dateStr) continue
 
-      const vao = vaoIdx >= 0 ? (parseTime(row[vaoIdx])?.str || '') : ''
-      const ra = raIdx >= 0 ? (parseTime(row[raIdx])?.str || '') : ''
-      const times = [vao, ra].filter(Boolean)
-      const stats = times.length ? calculateStats(times) : { checkIn: vao, checkOut: ra, hours: num(row[gioIdx]), status: 'Đủ', lateMinutes: 0, earlyMinutes: 0, punches: times }
+      const { checkIn: vao, checkOut: ra, punches } =
+        collectAttendancePunches(row, punchColumns, parseTime)
+      let stats
+      if (vao && ra) {
+        stats = { ...calculateStats([vao, ra]), punches }
+      } else if (vao) {
+        stats = { ...calculateStats([vao]), punches }
+      } else if (ra) {
+        stats = {
+          checkIn: null,
+          checkOut: ra,
+          hours: 0,
+          status: 'Thiếu vào',
+          lateMinutes: 0,
+          earlyMinutes: 0,
+          punches
+        }
+      } else {
+        stats = {
+          checkIn: null,
+          checkOut: null,
+          hours: num(row[gioIdx]),
+          status: 'Đủ',
+          lateMinutes: 0,
+          earlyMinutes: 0,
+          punches: []
+        }
+      }
 
       logs.push(buildLog(sysEmp, dateStr, stats, {
         employeeCode: String(empCode || sysEmp.employeeId || ''),

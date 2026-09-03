@@ -56,6 +56,11 @@ const similarity = (left, right) => {
 const employeeName = (employee) =>
   employee?.ho_va_ten || employee?.name || employee?.fullName || ''
 
+const givenName = (value) => {
+  const tokens = normalizeEmployeeIdentity(value).split(' ').filter(Boolean)
+  return tokens[tokens.length - 1] || ''
+}
+
 export const getCanonicalEmployeeCode = (employee) =>
   employee?.employeeId ||
   employee?.employee_id ||
@@ -86,6 +91,12 @@ const scoreCandidate = (sourceCode, sourceName, employee) => {
   const candidateWithoutMiddle = compactWithoutCommonMiddleNames(employeeName(employee))
   const sourceCodeCompact = compactEmployeeIdentity(sourceCode)
   const candidateCodes = employeeCodes(employee)
+  const sourceGivenName = givenName(sourceName)
+  const candidateGivenName = givenName(employeeName(employee))
+  const givenNameCompatible =
+    Boolean(sourceGivenName) &&
+    Boolean(candidateGivenName) &&
+    similarity(sourceGivenName, candidateGivenName) >= 0.85
 
   const exactName =
     Boolean(sourceNameCompact) &&
@@ -105,7 +116,11 @@ const scoreCandidate = (sourceCode, sourceName, employee) => {
   } else if (exactCode && !sourceNameCompact) {
     score = 1
     method = 'Mã nhân viên trùng'
-  } else if (exactCode && score >= MIN_NAME_SCORE_FOR_EXACT_CODE_MATCH) {
+  } else if (
+    exactCode &&
+    givenNameCompatible &&
+    score >= MIN_NAME_SCORE_FOR_EXACT_CODE_MATCH
+  ) {
     score = Math.max(score, 0.99)
     method = 'Mã trùng, tên tương thích'
   } else if (exactCode) {
@@ -124,7 +139,9 @@ const scoreCandidate = (sourceCode, sourceName, employee) => {
     score: Math.max(0, Math.min(1, score)),
     method,
     exactName,
-    exactCode
+    exactCode,
+    hasSourceName: Boolean(sourceNameCompact),
+    givenNameCompatible
   }
 }
 
@@ -145,7 +162,12 @@ export const rankEmployeeMatches = (
 
   return candidates
     .map(employee => scoreCandidate(sourceCode, sourceName, employee))
-    .sort((left, right) => right.score - left.score)
+    .sort((left, right) =>
+      right.score - left.score ||
+      Number(right.exactCode && right.exactName) -
+        Number(left.exactCode && left.exactName) ||
+      Number(right.exactName) - Number(left.exactName)
+    )
 }
 
 export const matchAttendanceEmployee = (
@@ -159,12 +181,17 @@ export const matchAttendanceEmployee = (
   const second = ranked[1] || null
   const confidence = best?.score || 0
   const gap = best ? confidence - (second?.score || 0) : 0
+  const uniqueExactName = best?.exactName && !second?.exactName
   const autoMatched =
     Boolean(best) &&
     (
-      best.exactName ||
-      (best.exactCode && confidence >= 0.9) ||
-      (confidence >= 0.9 && gap >= 0.08)
+      uniqueExactName ||
+      (best.exactCode && (
+        best.exactName ||
+        !best.hasSourceName ||
+        (best.givenNameCompatible && confidence >= 0.9)
+      )) ||
+      (best.givenNameCompatible && confidence >= 0.9 && gap >= 0.08)
     )
 
   return {
