@@ -1,6 +1,7 @@
 import { normalizeString } from './helpers.js'
 
 const COMMON_MIDDLE_NAMES = new Set(['thi', 'van'])
+const MIN_NAME_SCORE_FOR_EXACT_CODE_MATCH = 0.9
 
 export const normalizeEmployeeIdentity = (value) =>
   normalizeString(value)
@@ -104,7 +105,7 @@ const scoreCandidate = (sourceCode, sourceName, employee) => {
   } else if (exactCode && !sourceNameCompact) {
     score = 1
     method = 'Mã nhân viên trùng'
-  } else if (exactCode && score >= 0.6) {
+  } else if (exactCode && score >= MIN_NAME_SCORE_FOR_EXACT_CODE_MATCH) {
     score = Math.max(score, 0.99)
     method = 'Mã trùng, tên tương thích'
   } else if (exactCode) {
