@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import { fbGet } from '../services/firebase'
-import { buildAttendanceSummary } from '../utils/attendanceSummary'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { fbGet, fbGetAttendanceLogsByMonth, fbListCollectionIds, fbSet } from '../services/firebase'
+import {
+  buildAttendanceSummary,
+  hydrateAttendanceSummaryRows,
+  serializeAttendanceSummaryRows
+} from '../utils/attendanceSummary'
 import './AttendancePreview.css'
 
 const money = value => Number(value || 0).toLocaleString('vi-VN')
@@ -11,7 +15,7 @@ const dateText = value => {
 const contractType = row => row.contractType || (String(row.employmentStatus).toLowerCase().includes('chính thức') ? 'Chính Thức' : 'Thử việc')
 const dayCode = day => {
   if (!day) return ''
-  const statuses = day.logs.map(log => String(log.kyHieuPlus || log.kyHieu || log.status || '').trim().toUpperCase()).filter(Boolean)
+  const statuses = (day.logs || []).map(log => String(log.kyHieuPlus || log.kyHieu || log.status || '').trim().toUpperCase()).filter(Boolean)
   const code = statuses.find(value => ['X', 'X1', 'X2', 'X3', 'P1'].includes(value))
   if (code) return code
   if (day.paidLeaveWorkdays > 0 || statuses.includes('V')) return 'P1'
@@ -70,50 +74,149 @@ const groupRowsByDepartment = rows => {
   })
   return Array.from(groups.values()).flat()
 }
+const formatGeneratedAt = value => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('vi-VN')
+}
+const currentMonthValue = () => new Date().toISOString().slice(0, 7)
 
 function AttendancePreview() {
-  const [employees, setEmployees] = useState([])
-  const [logs, setLogs] = useState([])
-  const [month, setMonth] = useState('')
-  const [adjustments, setAdjustments] = useState({})
-  const [manuals, setManuals] = useState({})
+  const [month, setMonth] = useState(currentMonthValue)
+  const [summaryMonths, setSummaryMonths] = useState([])
+  const [rows, setRows] = useState([])
+  const [generatedAt, setGeneratedAt] = useState('')
+  const [sourceLogCount, setSourceLogCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [monthLoading, setMonthLoading] = useState(false)
+  const [summarizing, setSummarizing] = useState(false)
   const [error, setError] = useState('')
+  const [hasSnapshot, setHasSnapshot] = useState(false)
 
-  useEffect(() => {
-    Promise.all([fbGet('employees'), fbGet('hr/attendanceLogs')]).then(([employeeData, logData]) => {
-      const employeeList = employeeData ? Object.entries(employeeData).map(([id, value]) => ({ ...value, id })) : []
-      const logList = logData ? Object.entries(logData).map(([id, value]) => ({ ...value, id })) : []
-      setEmployees(employeeList)
-      setLogs(logList)
-      const latest = [...new Set(logList.map(log => String(log.date || log.timestamp || '').slice(0, 7)))].filter(value => /^\d{4}-\d{2}$/.test(value)).sort().at(-1)
-      setMonth(latest || new Date().toISOString().slice(0, 7))
-    }).catch(requestError => {
-      console.error('Không tải được preview bảng công:', requestError)
-      setError('Không thể tải dữ liệu bảng công.')
-    }).finally(() => setLoading(false))
+  const applySnapshot = useCallback((snapshot, nextMonth) => {
+    if (!snapshot?.rows) {
+      setRows([])
+      setGeneratedAt('')
+      setSourceLogCount(0)
+      setHasSnapshot(false)
+      return
+    }
+    setRows(groupRowsByDepartment(hydrateAttendanceSummaryRows(snapshot.rows)))
+    setGeneratedAt(snapshot.generatedAt || '')
+    setSourceLogCount(Number(snapshot.sourceLogCount || 0))
+    setHasSnapshot(true)
+    if (nextMonth) setMonth(nextMonth)
   }, [])
 
-  useEffect(() => {
-    if (!month) return
-    setMonthLoading(true)
-    setAdjustments({})
-    setManuals({})
-    Promise.all([fbGet(`hr/attendanceAdjustments/${month}`), fbGet(`hr/manualWorkdays/${month}`)])
-      .then(([nextAdjustments, nextManuals]) => {
-        setAdjustments(nextAdjustments || {})
-        setManuals(nextManuals || {})
-      })
-      .catch(requestError => console.error('Không tải được dữ liệu điều chỉnh:', requestError))
-      .finally(() => setMonthLoading(false))
-  }, [month])
+  const loadSummaryIndex = useCallback(async () => {
+    const ids = await fbListCollectionIds('attendanceMonthSummaries')
+    const months = ids.filter(value => /^\d{4}-\d{2}$/.test(value)).sort().reverse()
+    setSummaryMonths(months)
+    return months
+  }, [])
 
-  const months = useMemo(() => [...new Set(logs.map(log => String(log.date || log.timestamp || '').slice(0, 7)))].filter(value => /^\d{4}-\d{2}$/.test(value)).sort().reverse(), [logs])
-  const rows = useMemo(() => groupRowsByDepartment(buildAttendanceSummary({ attendanceLogs: logs, employees, month, attendanceAdjustments: adjustments, manualWorkdays: manuals })), [adjustments, employees, logs, manuals, month])
+  const loadMonthSnapshot = useCallback(async (targetMonth) => {
+    if (!targetMonth) return
+    setLoading(true)
+    setError('')
+    try {
+      const snapshot = await fbGet(`hr/attendanceMonthSummaries/${targetMonth}`)
+      applySnapshot(snapshot, targetMonth)
+    } catch (requestError) {
+      console.error('Không tải được bảng công đã tổng hợp:', requestError)
+      setError('Không thể tải bảng công đã tổng hợp.')
+      applySnapshot(null, targetMonth)
+    } finally {
+      setLoading(false)
+    }
+  }, [applySnapshot])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      setError('')
+      try {
+        const months = await loadSummaryIndex()
+        if (cancelled) return
+        const initialMonth = months[0] || currentMonthValue()
+        setMonth(initialMonth)
+        const snapshot = await fbGet(`hr/attendanceMonthSummaries/${initialMonth}`)
+        if (cancelled) return
+        applySnapshot(snapshot, initialMonth)
+      } catch (requestError) {
+        console.error('Không tải được danh sách bảng công:', requestError)
+        if (!cancelled) setError('Không thể tải dữ liệu bảng công.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [applySnapshot, loadSummaryIndex])
+
+  const handleMonthChange = async (nextMonth) => {
+    setMonth(nextMonth)
+    await loadMonthSnapshot(nextMonth)
+  }
+
+  const handleSummarize = async () => {
+    const targetMonth = month || currentMonthValue()
+    if (!/^\d{4}-\d{2}$/.test(targetMonth)) {
+      alert('Tháng không hợp lệ. Dùng định dạng YYYY-MM.')
+      return
+    }
+    if (!confirm(`Tổng hợp bảng công tháng ${targetMonth}?\nDữ liệu sẽ được lưu riêng và dùng để xem lại, không tính lại mỗi lần mở trang.`)) {
+      return
+    }
+
+    setSummarizing(true)
+    setError('')
+    try {
+      const [employeeData, logData, nextAdjustments, nextManuals] = await Promise.all([
+        fbGet('employees'),
+        fbGetAttendanceLogsByMonth(targetMonth),
+        fbGet(`hr/attendanceAdjustments/${targetMonth}`),
+        fbGet(`hr/manualWorkdays/${targetMonth}`)
+      ])
+      const employeeList = employeeData
+        ? Object.entries(employeeData).map(([id, value]) => ({ ...value, id }))
+        : []
+      const monthLogs = logData
+        ? Object.entries(logData).map(([id, value]) => ({ ...value, id }))
+        : []
+      const summaryRows = buildAttendanceSummary({
+        attendanceLogs: monthLogs,
+        employees: employeeList,
+        month: targetMonth,
+        attendanceAdjustments: nextAdjustments || {},
+        manualWorkdays: nextManuals || {}
+      })
+      const snapshot = {
+        month: targetMonth,
+        generatedAt: new Date().toISOString(),
+        sourceLogCount: monthLogs.length,
+        employeeCount: summaryRows.length,
+        rows: serializeAttendanceSummaryRows(summaryRows)
+      }
+      await fbSet(`hr/attendanceMonthSummaries/${targetMonth}`, snapshot)
+      applySnapshot(snapshot, targetMonth)
+      setSummaryMonths(prev => {
+        const next = new Set(prev)
+        next.add(targetMonth)
+        return Array.from(next).sort().reverse()
+      })
+      alert(`Đã tổng hợp bảng công tháng ${targetMonth} (${summaryRows.length} nhân viên).`)
+    } catch (requestError) {
+      console.error('Tổng hợp bảng công thất bại:', requestError)
+      alert('Lỗi tổng hợp bảng công: ' + (requestError.message || requestError))
+    } finally {
+      setSummarizing(false)
+    }
+  }
+
   const departmentRowSpans = useMemo(() => getConsecutiveDepartmentRowSpans(rows), [rows])
   const calendar = useMemo(() => {
-    const [year, monthNumber] = month.split('-').map(Number)
+    const [year, monthNumber] = String(month || '').split('-').map(Number)
     const daysInMonth = year && monthNumber ? new Date(year, monthNumber, 0).getDate() : 31
     return Array.from({ length: 31 }, (_, index) => {
       const day = index + 1
@@ -142,19 +245,66 @@ function AttendancePreview() {
     return { label: `Tuần ${index + 1}`, events }
   }), [calendar.length, month, rows])
 
-  if (loading || monthLoading) return <div className="attendance-preview-state">Đang lấy dữ liệu mới nhất...</div>
-  if (error) return <div className="attendance-preview-state is-error">{error}</div>
+  if (loading) return <div className="attendance-preview-state">Đang tải bảng công đã tổng hợp...</div>
+  if (error && !hasSnapshot) return <div className="attendance-preview-state is-error">{error}</div>
+
   return <div className="attendance-preview-page">
-    <header><div><h1>Bảng công {month}</h1><p>Dữ liệu database tại thời điểm mở trang · Không realtime</p></div><label>Tháng<select value={month} onChange={event => setMonth(event.target.value)}>{months.map(value => <option key={value}>{value}</option>)}</select></label></header>
-    <div className="attendance-preview-scroll"><table className="attendance-preview-table">
-      <thead>
-        <tr className="totals"><th colSpan="11"></th><th>{totals.under30 || 0}</th><th>{money(totals.lateFine)}</th><th>{totals.over30 || 0}</th><th>{money(totals.overFine)}</th><th>{totals.missing || 0}</th><th>{money(totals.missingFine)}</th><th colSpan="5"></th><th>{money(totals.absenceFine)}</th><th></th><th>{money(totals.total)}</th><th colSpan="2"></th><th>{totals.overtime || 0}</th><th>{totals.leave || 0}</th><th></th><th>{totals.probation || 0}</th><th>{totals.official || 0}</th><th colSpan="2"></th><th>{totals.workdays || 0}</th><th colSpan={calendar.length}></th></tr>
-        <tr className="groups"><th rowSpan="2">STT</th><th rowSpan="2">Xác nhận</th><th colSpan="3">Thông tin nhân sự</th><th rowSpan="2">Loại HĐ</th><th rowSpan="2">Trạng thái</th><th rowSpan="2">Ngày nhận việc</th><th rowSpan="2">Ngày chính thức</th><th rowSpan="2">Ngày làm việc cuối</th><th rowSpan="2">Notes</th><th colSpan="14">Phạt Nội quy</th><th rowSpan="2">Vé xe</th><th rowSpan="2">Phép còn lại</th><th rowSpan="2">Tăng ca</th><th rowSpan="2">Phép sử dụng</th><th rowSpan="2">Học việc</th><th rowSpan="2">Thử việc</th><th rowSpan="2">Chính thức</th><th rowSpan="2">Công làm lễ</th><th rowSpan="2">Công lễ</th><th rowSpan="2">Tổng công</th>{calendar.map(item => <th key={`w${item.day}`}>{item.weekday}</th>)}</tr>
-        <tr className="columns"><th>Họ tên</th><th>Bộ phận</th><th>Ca làm</th><th>Muộn/sớm &lt;30p</th><th>Phạt</th><th>Muộn/sớm ≥30p</th><th>Phạt</th><th>Quên chấm</th><th>Phạt</th><th>Không trực nhật</th><th>Phạt</th><th>Nghỉ đột xuất</th><th>Phạt</th><th>Nghỉ không phép</th><th>Phạt</th><th>Say xỉn</th><th>Tổng phạt</th>{calendar.map(item => <th key={item.day}>{item.day}</th>)}</tr>
-      </thead><tbody>{rows.map((row, index) => { const fine = penalties(row); return <tr key={row.employeeId}><td>{index + 1}</td><td></td><td className="name">{row.employeeName}</td>{departmentRowSpans[index] > 0 && <td rowSpan={departmentRowSpans[index]}>{row.displayDepartment}</td>}<td>{row.shift}</td><td>{contractType(row)}</td><td>{row.employmentStatus}</td><td>{dateText(row.joinDate)}</td><td>{dateText(row.officialDate)}</td><td>{dateText(row.lastWorkingDate)}</td><td>{row.lateCount ? `${row.lateCount} lần (${row.lateMinutes}p)` : ''}</td><td>{fine.under30}</td><td>{money(fine.lateFine)}</td><td>{fine.over30}</td><td>{money(fine.overFine)}</td><td>{fine.missing}</td><td>{money(fine.missingFine)}</td><td></td><td></td><td></td><td></td><td>{fine.absence}</td><td>{money(fine.absenceFine)}</td><td></td><td className="fine">{money(fine.total)}</td><td></td><td></td><td>{row.overtimeHours || ''}</td><td>{row.paidLeaveWorkdays || ''}</td><td></td><td>{row.probationWorkdays || ''}</td><td>{row.officialWorkdays || ''}</td><td></td><td></td><td>{row.workdays || ''}</td>{calendar.map(item => <td key={item.day} className="day">{dayCode(row.days.get(`${month}-${String(item.day).padStart(2, '0')}`))}</td>)}</tr> })}</tbody>
-    </table></div>
-    <section className="attendance-preview-weeks">{weekly.map(week => <article key={week.label}><h3>{week.label}</h3>{week.events.map(event => <div key={event.label}><strong>{event.label}: {event.people.length}</strong><span>{event.people.join(', ') || 'Không có'}</span></div>)}</article>)}</section>
-    <section className="attendance-preview-legend"><strong>Chú thích:</strong><span>X: Nghỉ theo lịch/không phép theo trạng thái</span><span>P1: Nghỉ phép năm</span><span>1 / 0.5: Công trong ngày</span></section>
+    <header>
+      <div>
+        <h1>Bảng công {month}</h1>
+        <p>
+          {hasSnapshot
+            ? `Đã tổng hợp lúc ${formatGeneratedAt(generatedAt)}${sourceLogCount ? ` · ${sourceLogCount} bản ghi chấm công` : ''}`
+            : 'Chưa tổng hợp tháng này · Bấm Tổng hợp để tính và lưu'}
+        </p>
+      </div>
+      <div className="attendance-preview-actions">
+        <label>
+          Tháng
+          <input
+            type="month"
+            value={month}
+            onChange={event => handleMonthChange(event.target.value)}
+            disabled={summarizing}
+          />
+        </label>
+        {summaryMonths.length > 0 && (
+          <label>
+            Đã lưu
+            <select
+              value={summaryMonths.includes(month) ? month : ''}
+              onChange={event => event.target.value && handleMonthChange(event.target.value)}
+              disabled={summarizing}
+            >
+              {!summaryMonths.includes(month) && <option value="">Chọn tháng đã tổng hợp</option>}
+              {summaryMonths.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+        )}
+        <button type="button" className="attendance-preview-summarize" onClick={handleSummarize} disabled={summarizing}>
+          {summarizing ? 'Đang tổng hợp...' : 'Tổng hợp'}
+        </button>
+      </div>
+    </header>
+
+    {!hasSnapshot ? (
+      <div className="attendance-preview-empty">
+        <p>Tháng {month} chưa có dữ liệu tổng hợp.</p>
+        <p>Bấm <strong>Tổng hợp</strong> để tính từ chấm công và lưu vào database riêng — lần sau mở trang sẽ tải nhanh, không tính lại.</p>
+      </div>
+    ) : (
+      <>
+        <div className="attendance-preview-scroll"><table className="attendance-preview-table">
+          <thead>
+            <tr className="totals"><th colSpan="11"></th><th>{totals.under30 || 0}</th><th>{money(totals.lateFine)}</th><th>{totals.over30 || 0}</th><th>{money(totals.overFine)}</th><th>{totals.missing || 0}</th><th>{money(totals.missingFine)}</th><th colSpan="5"></th><th>{money(totals.absenceFine)}</th><th></th><th>{money(totals.total)}</th><th colSpan="2"></th><th>{totals.overtime || 0}</th><th>{totals.leave || 0}</th><th></th><th>{totals.probation || 0}</th><th>{totals.official || 0}</th><th colSpan="2"></th><th>{totals.workdays || 0}</th><th colSpan={calendar.length}></th></tr>
+            <tr className="groups"><th rowSpan="2">STT</th><th rowSpan="2">Xác nhận</th><th colSpan="3">Thông tin nhân sự</th><th rowSpan="2">Loại HĐ</th><th rowSpan="2">Trạng thái</th><th rowSpan="2">Ngày nhận việc</th><th rowSpan="2">Ngày chính thức</th><th rowSpan="2">Ngày làm việc cuối</th><th rowSpan="2">Notes</th><th colSpan="14">Phạt Nội quy</th><th rowSpan="2">Vé xe</th><th rowSpan="2">Phép còn lại</th><th rowSpan="2">Tăng ca</th><th rowSpan="2">Phép sử dụng</th><th rowSpan="2">Học việc</th><th rowSpan="2">Thử việc</th><th rowSpan="2">Chính thức</th><th rowSpan="2">Công làm lễ</th><th rowSpan="2">Công lễ</th><th rowSpan="2">Tổng công</th>{calendar.map(item => <th key={`w${item.day}`}>{item.weekday}</th>)}</tr>
+            <tr className="columns"><th>Họ tên</th><th>Bộ phận</th><th>Ca làm</th><th>Muộn/sớm &lt;30p</th><th>Phạt</th><th>Muộn/sớm ≥30p</th><th>Phạt</th><th>Quên chấm</th><th>Phạt</th><th>Không trực nhật</th><th>Phạt</th><th>Nghỉ đột xuất</th><th>Phạt</th><th>Nghỉ không phép</th><th>Phạt</th><th>Say xỉn</th><th>Tổng phạt</th>{calendar.map(item => <th key={item.day}>{item.day}</th>)}</tr>
+          </thead><tbody>{rows.map((row, index) => { const fine = penalties(row); return <tr key={row.employeeId}><td>{index + 1}</td><td></td><td className="name">{row.employeeName}</td>{departmentRowSpans[index] > 0 && <td rowSpan={departmentRowSpans[index]}>{row.displayDepartment}</td>}<td>{row.shift}</td><td>{contractType(row)}</td><td>{row.employmentStatus}</td><td>{dateText(row.joinDate)}</td><td>{dateText(row.officialDate)}</td><td>{dateText(row.lastWorkingDate)}</td><td>{row.lateCount ? `${row.lateCount} lần (${row.lateMinutes}p)` : ''}</td><td>{fine.under30}</td><td>{money(fine.lateFine)}</td><td>{fine.over30}</td><td>{money(fine.overFine)}</td><td>{fine.missing}</td><td>{money(fine.missingFine)}</td><td></td><td></td><td></td><td></td><td>{fine.absence}</td><td>{money(fine.absenceFine)}</td><td></td><td className="fine">{money(fine.total)}</td><td></td><td></td><td>{row.overtimeHours || ''}</td><td>{row.paidLeaveWorkdays || ''}</td><td></td><td>{row.probationWorkdays || ''}</td><td>{row.officialWorkdays || ''}</td><td></td><td></td><td>{row.workdays || ''}</td>{calendar.map(item => <td key={item.day} className="day">{dayCode(row.days.get(`${month}-${String(item.day).padStart(2, '0')}`))}</td>)}</tr> })}</tbody>
+        </table></div>
+        <section className="attendance-preview-weeks">{weekly.map(week => <article key={week.label}><h3>{week.label}</h3>{week.events.map(event => <div key={event.label}><strong>{event.label}: {event.people.length}</strong><span>{event.people.join(', ') || 'Không có'}</span></div>)}</article>)}</section>
+        <section className="attendance-preview-legend"><strong>Chú thích:</strong><span>X: Nghỉ theo lịch/không phép theo trạng thái</span><span>P1: Nghỉ phép năm</span><span>1 / 0.5: Công trong ngày</span></section>
+      </>
+    )}
   </div>
 }
 

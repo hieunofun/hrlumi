@@ -31,7 +31,7 @@ VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY
 ### Trong `hr_records` (cột `collection`)
 - **Lương / phúc lợi:** `salaryGrades`, `employeeSalaries`, `promotionHistory`, `payrolls`
 - **Bảo hiểm / thuế:** `insuranceInfo`, `taxInfo`, `dependents`
-- **Chấm công:** `attendanceLogs`, `attendanceAdjustments`, `manualWorkdays`
+- **Chấm công:** `attendanceLogs`, `attendanceAdjustments`, `manualWorkdays`, `attendanceMonthSummaries` (snapshot bảng công theo tháng)
 - **KPI:** `kpiTemplates`, `employeeKPIs`, `kpiConversions`, `kpiResults`
 - **Giao việc:** `tasks`, `taskLogs`
 - **Tuyển dụng:** `recruitmentPlans`, `candidates`, `candidateStatusLogs`

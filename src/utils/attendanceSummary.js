@@ -340,3 +340,46 @@ export const buildAttendanceSummary = ({
     left.employeeName.localeCompare(right.employeeName, 'vi')
   )
 }
+
+const slimDayLogs = (logs = []) =>
+  logs.map(log => ({
+    kyHieu: log.kyHieu || '',
+    kyHieuPlus: log.kyHieuPlus || '',
+    status: log.status || ''
+  }))
+
+/** Persist summary rows to hr_records (Map → plain object, slim logs). */
+export const serializeAttendanceSummaryRows = (rows = []) =>
+  rows.map(row => ({
+    ...row,
+    days: Object.fromEntries(
+      Array.from(row.days?.entries?.() || []).map(([date, day]) => [
+        date,
+        {
+          hours: day.hours,
+          workdays: day.workdays,
+          regularWorkdays: day.regularWorkdays,
+          extraWorkdays: day.extraWorkdays,
+          overtimeHours: day.overtimeHours,
+          paidLeaveWorkdays: day.paidLeaveWorkdays,
+          lateMinutes: day.lateMinutes,
+          earlyMinutes: day.earlyMinutes,
+          late: Boolean(day.late),
+          early: Boolean(day.early),
+          missingPunch: Boolean(day.missingPunch),
+          unapprovedAbsence: Boolean(day.unapprovedAbsence),
+          onlineWorkdays: day.onlineWorkdays,
+          offlineWorkdays: day.offlineWorkdays,
+          hasPunch: Boolean(day.hasPunch),
+          logs: slimDayLogs(day.logs)
+        }
+      ])
+    )
+  }))
+
+/** Restore summary rows after loading from snapshot (plain object → Map). */
+export const hydrateAttendanceSummaryRows = (rows = []) =>
+  (rows || []).map(row => ({
+    ...row,
+    days: new Map(Object.entries(row.days || {}))
+  }))

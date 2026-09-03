@@ -252,6 +252,65 @@ export const fbGetAttendanceByEmployee = async (employeeId) => {
   return Object.fromEntries((data || []).map(row => [row.id.startsWith(prefix) ? row.id.slice(prefix.length) : row.id, row.data || {}]))
 }
 
+/**
+ * Load attendance logs for one YYYY-MM (filters by data.date prefix).
+ * Falls back to client filter if date-only rows are missing.
+ */
+export const fbGetAttendanceLogsByMonth = async (month) => {
+  const period = String(month || '').trim()
+  if (!/^\d{4}-\d{2}$/.test(period)) return null
+
+  const pageSize = 1000
+  const rows = []
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('hr_records')
+      .select('id, data')
+      .eq('collection', 'attendanceLogs')
+      .gte('data->>date', `${period}-01`)
+      .lte('data->>date', `${period}-31`)
+      .range(from, from + pageSize - 1)
+    if (error) throw error
+    rows.push(...(data || []))
+    if (!data || data.length < pageSize) break
+  }
+
+  // Also pick timestamp-only logs that may lack data.date
+  if (!rows.length) {
+    const all = await listCollection('attendanceLogs')
+    if (!all) return null
+    const filtered = Object.fromEntries(
+      Object.entries(all).filter(([, log]) =>
+        String(log.date || log.timestamp || '').slice(0, 7) === period
+      )
+    )
+    return Object.keys(filtered).length ? filtered : null
+  }
+
+  const prefix = 'attendanceLogs::'
+  const out = {}
+  rows.forEach((row) => {
+    const logicalId = row.id.startsWith(prefix) ? row.id.slice(prefix.length) : row.id
+    out[logicalId] = row.data || {}
+  })
+  return out
+}
+
+/** List logical ids in a collection without loading full JSON payloads. */
+export const fbListCollectionIds = async (collection) => {
+  const name = String(collection || '').trim()
+  if (!name) return []
+  const { data, error } = await supabase
+    .from('hr_records')
+    .select('id')
+    .eq('collection', name)
+  if (error) throw error
+  const prefix = `${name}::`
+  return (data || []).map((row) =>
+    row.id.startsWith(prefix) ? row.id.slice(prefix.length) : row.id
+  )
+}
+
 export const fbSet = async (path, data) => {
   const parsed = parsePath(path)
 
