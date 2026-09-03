@@ -30,7 +30,7 @@ function AttendanceImportModal({
   const [aiAvailable, setAiAvailable] = useState(null)
   const [previewData, setPreviewData] = useState(null)
   const [importMonth, setImportMonth] = useState(new Date().toISOString().slice(0, 7)) // YYYY-MM
-  const [matchBranch, setMatchBranch] = useState('Hà Nội')
+  const [matchBranch, setMatchBranch] = useState('HCM')
 
   const availableBranches = useMemo(
     () => Array.from(new Set(
@@ -1019,8 +1019,13 @@ function AttendanceImportModal({
     const unresolvedCount = previewData.matchGroups.filter(
       group => !group.selectedEmployeeId && group.status !== 'skipped'
     ).length
-    if (unresolvedCount > 0) {
-      alert(`Còn ${unresolvedCount} nhân viên chưa được ghép với hồ sơ Lumi.`)
+    if (
+      unresolvedCount > 0 &&
+      !confirm(
+        `Còn ${unresolvedCount} nhân viên chưa được ghép với hồ sơ Lumi.\n` +
+        'Các dòng này sẽ được lưu theo mã và tên trong file chấm công để không mất dữ liệu. Bạn có muốn tiếp tục?'
+      )
+    ) {
       return
     }
 
@@ -1084,7 +1089,9 @@ function AttendanceImportModal({
       alert(
         previewData.isReconcileMode
           ? `Đã cập nhật liên kết nhân sự cho ${count} dòng chấm công.`
-          : `Đã import ${count} dòng chấm công.${skippedCount ? ` Bỏ qua ${skippedCount} dòng đã có.` : ''}`
+          : `Đã import ${count} dòng chấm công.` +
+            `${unresolvedCount ? ` ${unresolvedCount} nhân viên được giữ theo mã/tên nguồn để đối soát sau.` : ''}` +
+            `${skippedCount ? ` Bỏ qua ${skippedCount} dòng đã có.` : ''}`
       )
       await onSave()
       onClose()
@@ -1533,8 +1540,12 @@ function AttendanceImportModal({
                   type="button"
                   className="btn btn-success"
                   onClick={executeImport}
-                  disabled={loading || unresolvedEmployeeCount > 0}
-                  title={unresolvedEmployeeCount > 0 ? 'Phải ghép hết nhân viên trước khi lưu' : ''}
+                  disabled={loading}
+                  title={
+                    unresolvedEmployeeCount > 0
+                      ? 'Nhân viên chưa ghép sẽ được giữ theo mã/tên nguồn để đối soát sau'
+                      : ''
+                  }
                 >
                   {loading
                     ? <><i className="fas fa-spinner fa-spin"></i> Đang lưu...</>
