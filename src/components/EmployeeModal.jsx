@@ -125,6 +125,7 @@ function getFileIcon(file) {
 }
 
 function EmployeeModal({
+  companyId,
   employee,
   isOpen,
   onClose,
@@ -198,7 +199,9 @@ function EmployeeModal({
         chi_nhanh: employee.chi_nhanh || 'HCM',
         bo_phan: employee.bo_phan || '',
         vi_tri: employee.vi_tri || '',
-        trang_thai: employee.trang_thai || employee.status || 'Thử việc',
+        // Hồ sơ đã tồn tại nhưng chưa được HR đánh dấu phải hiển thị trống;
+        // chỉ hồ sơ tạo mới mới dùng trạng thái khởi tạo Thử việc.
+        trang_thai: employee.trang_thai ?? employee.employmentStatus ?? employee.employment_status ?? employee.status ?? '',
         ca_lam_viec: employee.ca_lam_viec || DEFAULT_ATTENDANCE_SHIFT.name,
         ngay_vao_lam: employee.ngay_vao_lam || '',
         ngay_lam_chinh_thuc: employee.ngay_lam_chinh_thuc || '',
@@ -246,7 +249,7 @@ function EmployeeModal({
       setHasExistingPassword(false)
       setFormData(prev => ({ ...prev, password: '123456', passwordConfirm: '123456' }))
     }
-  }, [employee, isOpen, readOnly])
+  }, [employee, isOpen, readOnly, companyId])
 
   const resetForm = () => {
     const emptyDoc = [{ name: '', url: '', attachments: [] }]
@@ -539,7 +542,7 @@ function EmployeeModal({
       delete payloadForm.passwordConfirm
 
       if (employee && employee.id) {
-        const dbPayload = mapAppToUser(payloadForm)
+        const dbPayload = { ...mapAppToUser(payloadForm) }
         if (nextPassword) {
           dbPayload.password = nextPassword
         }
@@ -582,7 +585,7 @@ function EmployeeModal({
         if (readOnly) return
         if ('id' in formData) delete formData.id
 
-        const dbPayload = mapAppToUser(payloadForm)
+        const dbPayload = { ...mapAppToUser(payloadForm) }
         dbPayload.password = nextPassword || '123456'
         dbPayload.id = crypto.randomUUID()
 

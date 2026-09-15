@@ -5,7 +5,6 @@
   background: #eef3f9;
   font-family: Arial, Helvetica, sans-serif;
 }
-
 .attendance-preview-page > header {
   display: flex;
   align-items: flex-end;
@@ -19,17 +18,20 @@
   color: #fff;
   box-shadow: 0 5px 18px rgba(15, 45, 80, 0.14);
 }
-
 .attendance-preview-page h1 {
   margin: 0 0 6px;
   font-size: 26px;
   line-height: 1.2;
 }
-
 .attendance-preview-page header p {
   margin: 0;
   color: #dceafa;
   font-size: 13px;
+}
+
+.attendance-preview-page header p.attendance-company-context {
+  margin-bottom: 5px;
+  font-size: 14px;
 }
 
 .attendance-preview-actions {
@@ -133,6 +135,7 @@
 
 .attendance-excel-detail-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
@@ -167,6 +170,20 @@
 }
 
 .attendance-excel-download-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.attendance-excel-detail-tools .attendance-pdf-download-btn {
+  background: #2563eb;
+  border-color: transparent;
+}
+
+.attendance-excel-detail-tools .attendance-pdf-download-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.attendance-excel-detail-tools .attendance-pdf-download-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -302,6 +319,27 @@
 .attendance-preview-summarize:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+.attendance-preview-pdf-btn {
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 6px;
+  background: #dc2626;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.attendance-preview-pdf-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.attendance-preview-pdf-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .attendance-preview-empty {
@@ -738,4 +776,190 @@
   .attendance-preview-actions { flex-direction: column; align-items: stretch; }
   .attendance-preview-page header label { justify-content: space-between; }
   .attendance-preview-scroll { max-height: calc(100vh - 225px); }
+}
+
+/* ==========================================================================
+   Matrix 31-Day View Styles (Matching Screenshot 2 & SpeeGo HR)
+   ========================================================================== */
+.attendance-detail-mode-tabs {
+  display: inline-flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 3px;
+  border-radius: 6px;
+  margin: 6px 0;
+}
+
+.attendance-detail-mode-tabs button {
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: #dceafa;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.attendance-detail-mode-tabs button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.attendance-detail-mode-tabs button.is-active {
+  background: #fff;
+  color: #0d427a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.attendance-matrix-scroll {
+  overflow: auto;
+  max-height: calc(90vh - 160px);
+}
+
+.attendance-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.attendance-matrix-table th,
+.attendance-matrix-table td {
+  border: 1px solid #b2cbe4;
+  padding: 6px 5px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.attendance-matrix-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.attendance-matrix-table .matrix-group-row th {
+  background: #dceaf7;
+  color: #0f2c4d;
+  font-weight: 700;
+}
+
+.attendance-matrix-table .matrix-group-row th.matrix-month-title {
+  background: #7ec4f8; /* Light blue header from Screenshot 2 */
+  color: #072a4a;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  padding: 8px 10px;
+}
+
+.attendance-matrix-table .matrix-days-row th {
+  background: #e9f2fa;
+  font-size: 11px;
+  padding: 4px 2px;
+  min-width: 32px;
+}
+
+.attendance-matrix-table .day-number {
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.attendance-matrix-table .day-dow {
+  font-size: 10px;
+  color: #4b5563;
+}
+
+.attendance-matrix-table .day-col.is-sunday {
+  background: #fee2e2;
+}
+
+.attendance-matrix-table .day-col.is-sunday .day-number,
+.attendance-matrix-table .day-col.is-sunday .day-dow {
+  color: #b91c1c;
+}
+
+.attendance-matrix-table .day-col.is-saturday {
+  background: #fef3c7;
+}
+
+.attendance-matrix-table tbody tr:nth-child(even) {
+  background: #fbfcfe;
+}
+
+.attendance-matrix-table tbody tr:hover {
+  background: #f0f7ff;
+}
+
+.attendance-matrix-table td.col-stt {
+  width: 40px;
+  color: #64748b;
+}
+
+.attendance-matrix-table td.col-code {
+  font-family: monospace;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: left;
+  padding-left: 8px;
+}
+
+.attendance-matrix-table td.col-name {
+  text-align: left;
+  font-weight: 600;
+  color: #0f223a;
+  min-width: 150px;
+  padding-left: 8px;
+}
+
+.attendance-matrix-table td.col-pos {
+  text-align: left;
+  color: #475569;
+  min-width: 100px;
+  padding-left: 6px;
+}
+
+.attendance-matrix-table td.col-total {
+  font-weight: 700;
+  color: #0d427a;
+  background: #fff8e1;
+  font-size: 13px;
+}
+
+.attendance-matrix-table td.matrix-cell {
+  min-width: 30px;
+  font-weight: 500;
+}
+
+.attendance-matrix-table td.matrix-cell.is-work {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.attendance-matrix-table td.matrix-cell.is-off {
+  color: #94a3b8;
+  background: #f8fafc;
+}
+
+.attendance-matrix-table td.col-company {
+  min-width: 140px;
+  text-align: left;
+}
+
+@media (max-width: 760px) {
+  .attendance-excel-detail-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .attendance-excel-detail-tools input {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
+.attendance-matrix-table td.matrix-cell.is-holiday {
+  color: #8a5a00;
+  background: #fff3cd;
+  font-weight: 700;
 }

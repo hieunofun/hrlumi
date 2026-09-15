@@ -69,7 +69,7 @@ function GradingPage() {
 
     useEffect(() => {
         checkUser()
-    }, [])
+    }, [authUser, employeeId])
 
     useEffect(() => {
         if (user && month) {

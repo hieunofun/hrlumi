@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import EmployeeDirectory from '../components/EmployeeDirectory'
 import { supabase } from '../services/supabase'
-import { formatDateDisplay, mapAppToUser, mapUserToApp, parseFlexibleDate, runUsersMutationWithSchemaFallback, USERS_DIRECTORY_COLUMNS, getMissingUsersColumnFromError } from '../utils/helpers'
+import { useAuth } from '../contexts/AuthContext'
+import { getCompanyIdForUser } from '../utils/companyContext'
+import { formatDateDisplay, getEmployeeEmploymentStatus, mapAppToUser, mapUserToApp, parseFlexibleDate, runUsersMutationWithSchemaFallback, USERS_DIRECTORY_COLUMNS, getMissingUsersColumnFromError } from '../utils/helpers'
 
 const loadXlsx = () => import('xlsx')
 
@@ -64,6 +66,8 @@ const EMPLOYEE_EXCEL_HEADERS = [
 ]
 
 function Employees() {
+    const { user } = useAuth()
+    const companyId = getCompanyIdForUser(user)
     const [employees, setEmployees] = useState([])
     const [filteredEmployees, setFilteredEmployees] = useState([])
     const [loading, setLoading] = useState(true)
@@ -85,7 +89,7 @@ function Employees() {
 
     useEffect(() => {
         loadEmployees()
-    }, [])
+    }, [companyId])
 
     useEffect(() => {
         filterEmployees()
@@ -94,7 +98,7 @@ function Employees() {
     const loadEmployees = async () => {
         try {
             setLoading(true)
-            const data = await fetchUsersDirectory()
+            const data = await fetchUsersDirectory(companyId)
             setEmployees((data || []).map(u => mapUserToApp(u)))
             setLoading(false)
         } catch (err) {
@@ -119,7 +123,7 @@ function Employees() {
         let filtered = employees.filter(item => {
             if (!item) return false
 
-            const tinhTrang = item.tinh_trang || item.status || ''
+            const tinhTrang = getEmployeeEmploymentStatus(item)
             const trangThai = item.trang_thai || ''
             // Mặc định ẩn NV nghỉ việc; chỉ hiện khi chọn lọc "Nghỉ việc"
             if (!filterStatus && (trangThai === 'Nghỉ việc' || tinhTrang === 'Nghỉ việc')) return false
@@ -138,9 +142,7 @@ function Employees() {
                 || (filterBranch === '__none__' ? !item.chi_nhanh : item.chi_nhanh === filterBranch)
             const matchDept = !filterDept
                 || (filterDept === '__none__' ? !item.bo_phan : item.bo_phan === filterDept)
-            const matchStatus = !filterStatus
-                || tinhTrang === filterStatus
-                || trangThai === filterStatus
+            const matchStatus = !filterStatus || tinhTrang === filterStatus
             const contractType = item.loai_hop_dong || item.contractType || ''
             const matchContract = !filterContract || contractType === filterContract
             const matchShift = !filterShift
@@ -224,7 +226,7 @@ function Employees() {
         idx + 1,
         emp.employeeId || '',
         emp.chi_nhanh || '',
-        emp.trang_thai || emp.status || '',
+        getEmployeeEmploymentStatus(emp),
         emp.ho_va_ten || emp.name || emp.Tên || '',
         emp.gioi_tinh || '',
         formatDateDisplay(emp.ngay_sinh || emp.dob) === '-' ? '' : formatDateDisplay(emp.ngay_sinh || emp.dob),
@@ -365,7 +367,7 @@ function Employees() {
                 return
             }
 
-            const headerKeywords = ['ho_va_ten', 'ho_ten', 'chi_nhanh', 'email_ca_nhan', 'vi_tri', 'so_cccd', 'sdt', 'ma_nv', 'ma_nhan_vien']
+            const headerKeywords = ['ho_va_ten', 'ho_ten', 'ten_nhan_vien', 'chi_nhanh', 'email_ca_nhan', 'vi_tri', 'so_cccd', 'sdt', 'ma_nv', 'ma_nhan_vien']
             let headerIdx = 0
             for (let i = 0; i < Math.min(rows.length, 15); i++) {
                 const normalized = (rows[i] || []).map(h => normalizeHeader(h))
@@ -453,6 +455,7 @@ function Employees() {
             let updated = 0
             let skipped = 0
             const errors = []
+            const seenImportKeys = new Map()
 
             for (let i = 0; i < dataRows.length; i++) {
                 const row = dataRows[i]
@@ -466,7 +469,7 @@ function Employees() {
 
                 const payload = {
                     employeeId: pick(rowObj, 'ma_nhan_vien', 'ma_nv', 'employee_id'),
-                    ho_va_ten: pick(rowObj, 'ho_va_ten', 'ho_ten', 'ten', 'name'),
+                    ho_va_ten: pick(rowObj, 'ho_va_ten', 'ho_ten', 'ten_nhan_vien', 'ten', 'name'),
                     email: pick(rowObj, 'email_ca_nhan', 'email'),
                     sđt: pick(rowObj, 'sdt', 'so_dien_thoai', 'dien_thoai', 'phone'),
                     username: pick(rowObj, 'ten_dang_nhap', 'username', 'user_name'),
@@ -498,6 +501,24 @@ function Employees() {
                     continue
                 }
 
+                // Bảng chấm công thường lặp lại một nhân viên theo từng ngày.
+                // Chỉ tạo hồ sơ một lần, đồng thời báo rõ mã có nhiều tên khác nhau.
+                const codeKey = normalizeCode(payload.employeeId)
+                const importKey = codeKey || normalizeCode(payload.ho_va_ten)
+                const previousName = seenImportKeys.get(importKey)
+                if (previousName) {
+                    if (normalizeCode(previousName) !== normalizeCode(payload.ho_va_ten)) {
+                        errors.push({
+                            row: rowIndex,
+                            name: payload.ho_va_ten,
+                            reason: `Mã NV ${payload.employeeId || '(trống)'} xuất hiện với tên khác (${previousName}); giữ hồ sơ đầu tiên`
+                        })
+                    }
+                    skipped++
+                    continue
+                }
+                seenImportKeys.set(importKey, payload.ho_va_ten)
+
                 const rowErrors = []
 
                 if (!isValidDate(payload.ngay_sinh)) rowErrors.push(`Ngày sinh không hợp lệ: "${payload.ngay_sinh}" (cần dd/mm/yyyy)`)
@@ -515,8 +536,7 @@ function Employees() {
                     continue
                 }
 
-                const dbPayload = mapAppToUser(payload)
-                const codeKey = normalizeCode(payload.employeeId)
+                const dbPayload = { ...mapAppToUser(payload) }
                 const existing = codeKey ? existingByCode.get(codeKey) : null
 
                 let mutationResult
@@ -540,11 +560,12 @@ function Employees() {
                 const { error } = mutationResult
 
                 if (error) {
-                    console.error('❌ Import error for:', payload.ho_va_ten, error)
+                    const finalError = error
+                    console.error('❌ Import error for:', payload.ho_va_ten, finalError)
                     errors.push({
                         row: rowIndex,
                         name: payload.ho_va_ten,
-                        reason: describeDbError(error)
+                        reason: describeDbError(finalError)
                     })
                     skipped++
                 } else if (existing?.id) {
@@ -585,7 +606,7 @@ function Employees() {
 
 
 
-    const isActiveEmployee = (e) => (e.trang_thai || e.status || '') !== 'Nghỉ việc'
+    const isActiveEmployee = (e) => getEmployeeEmploymentStatus(e) !== 'Nghỉ việc'
     const activeEmployees = employees.filter(isActiveEmployee)
 
     // Employees scoped by selected branch (for department tabs)
@@ -649,7 +670,7 @@ function Employees() {
     const renderCard = (emp, idx) => {
         const name = emp.ho_va_ten || emp.name || emp.Tên || 'N/A'
         const avatar = emp.avatarDataUrl || emp.avatarUrl || emp.avatar || ''
-        const status = emp.trang_thai || emp.status || ''
+        const status = getEmployeeEmploymentStatus(emp)
         return (
             <article key={emp.id || idx} className="employee-photo-card">
                 <div className="employee-photo-card__media">
@@ -700,7 +721,7 @@ function Employees() {
     const renderListRow = (emp, idx) => {
         const name = emp.ho_va_ten || emp.name || emp.Tên || 'N/A'
         const avatar = emp.avatarDataUrl || emp.avatarUrl || emp.avatar || ''
-        const status = emp.trang_thai || emp.status || ''
+        const status = getEmployeeEmploymentStatus(emp)
         return (
             <div key={emp.id || idx} className="employee-list-row">
                 <div className="employee-list-row__photo">
@@ -772,6 +793,7 @@ function Employees() {
     }
 
     return <EmployeeDirectory
+        companyId={companyId}
         employees={employees}
         filteredEmployees={filteredEmployees}
         activeTab={activeTab}

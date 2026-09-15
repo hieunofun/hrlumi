@@ -1,17 +1,17 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { formatDateDisplay } from '../utils/helpers'
+import { formatDateDisplay, getEmployeeEmploymentStatus } from '../utils/helpers'
 
 const EmployeeModal = lazy(() => import('./EmployeeModal'))
 const StatusHistoryView = lazy(() => import('./StatusHistoryView'))
 
 const getName = (employee) => employee.ho_va_ten || employee.name || employee.Tên || 'Chưa cập nhật'
-const getTinhTrang = (employee) => String(employee?.tinh_trang || employee?.status || '').trim()
+const getTinhTrang = (employee) => getEmployeeEmploymentStatus(employee)
 const getShift = (employee) => String(employee?.ca_lam_viec || employee?.shift || '').trim()
 const isResigned = (employee) =>
-    String(employee?.trang_thai || '').trim() === 'Nghỉ việc' || getTinhTrang(employee) === 'Nghỉ việc'
+    getTinhTrang(employee) === 'Nghỉ việc'
 
 function EmployeeDirectory({
-    employees, filteredEmployees, activeTab, setActiveTab, searchTerm, setSearchTerm,
+    companyId, employees, filteredEmployees, activeTab, setActiveTab, searchTerm, setSearchTerm,
     filterBranch, setFilterBranch,
     filterDept, setFilterDept, filterStatus, setFilterStatus, filterContract, setFilterContract,
     filterShift = '', setFilterShift,
@@ -118,7 +118,7 @@ function EmployeeDirectory({
 
             {activeTab === 'history' ? (
                 <Suspense fallback={<div className="loadingState">Đang tải lịch sử...</div>}>
-                    <StatusHistoryView employees={employees} onDataChange={onReload} />
+                    <StatusHistoryView companyId={companyId} employees={employees} onDataChange={onReload} />
                 </Suspense>
             ) : <>
                 <section className="employees-filter-card">
@@ -220,7 +220,7 @@ function EmployeeDirectory({
 
             {isModalOpen && (
                 <Suspense fallback={null}>
-                    <EmployeeModal employee={selectedEmployee} isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedEmployee(null); setIsReadOnly(false) }} onSave={onReload} readOnly={isReadOnly} departmentOptions={departments} positionOptions={[...new Set(activeEmployees.map(e => e.vi_tri).filter(Boolean))]} />
+                    <EmployeeModal companyId={companyId} employee={selectedEmployee} isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedEmployee(null); setIsReadOnly(false) }} onSave={onReload} readOnly={isReadOnly} departmentOptions={departments} positionOptions={[...new Set(activeEmployees.map(e => e.vi_tri).filter(Boolean))]} />
                 </Suspense>
             )}
         </div>

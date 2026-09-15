@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import { fbGet, fbGetAttendanceLogsByMonth, fbGetEmployeesDirectory, fbListCollectionIds, fbSet } from '../services/firebase'
 import {
   buildAttendanceSummary,
@@ -12,6 +13,8 @@ import {
   normalizeAttendanceShiftSettings,
   resolveAttendanceShift
 } from '../utils/attendanceShift'
+import { getCompanyIdForUser, getCompanyNameForContext } from '../utils/companyContext'
+import { openAttendancePrintWindow } from '../utils/attendancePdf'
 import './AttendancePreview.css'
 
 const EXCEL_DETAIL_PAGE_SIZE = 100
@@ -98,6 +101,7 @@ const dayCode = day => {
 const dayNotes = day => {
   if (!day) return ''
   const notes = []
+  if (day.isHoliday) notes.push(day.holidayName ? `Ngày lễ: ${day.holidayName}` : 'Ngày lễ')
   if (day.late) notes.push(`Muộn ${day.lateMinutes || 0}p`)
   if (day.early) notes.push(`Sớm ${day.earlyMinutes || 0}p`)
   if (day.missingPunch) notes.push('Quên chấm')
@@ -150,9 +154,17 @@ const groupRowsByDepartment = rows => {
 }
 
 function AttendancePreview() {
+  const { user } = useAuth()
+  const companyId = useMemo(() => getCompanyIdForUser(user), [user])
+  const [companyInfo] = useState({ name: 'SpeeGo Logistics' })
+  const companyName = useMemo(
+    () => getCompanyNameForContext(companyInfo, user),
+    [companyInfo, user]
+  )
   const [month, setMonth] = useState(currentMonthValue)
   const [summaryMonths, setSummaryMonths] = useState([])
   const [rows, setRows] = useState([])
+  const [loadedCompanyId, setLoadedCompanyId] = useState('')
   const [generatedAt, setGeneratedAt] = useState('')
   const [sourceLogCount, setSourceLogCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -172,6 +184,69 @@ function AttendancePreview() {
   const [excelSearch, setExcelSearch] = useState('')
   const [excelPage, setExcelPage] = useState(1)
   const [excelPageSize, setExcelPageSize] = useState(EXCEL_DETAIL_PAGE_SIZE)
+  const [detailViewMode, setDetailViewMode] = useState('matrix')
+
+  const daysInSelectedMonth = useMemo(() => {
+    const [y, m] = String(month || '').split('-').map(Number)
+    if (!y || !m) return 31
+    return new Date(y, m, 0).getDate()
+  }, [month])
+
+  const monthDaysHeader = useMemo(() => {
+    const [y, m] = String(month || '').split('-').map(Number)
+    if (!y || !m) return []
+    const days = []
+    const dowShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
+    for (let d = 1; d <= daysInSelectedMonth; d++) {
+      const date = new Date(y, m - 1, d)
+      days.push({
+        day: d,
+        dayStr: String(d).padStart(2, '0'),
+        dow: dowShort[date.getDay()],
+        isSunday: date.getDay() === 0,
+        isSaturday: date.getDay() === 6
+      })
+    }
+    return days
+  }, [month, daysInSelectedMonth])
+
+  const matrixRows = useMemo(() => {
+    if (!rows || rows.length === 0) return []
+    const term = normalizeSearch(excelSearch)
+    const filtered = rows.filter(r => {
+      if (!term) return true
+      const code = normalizeSearch(r.displayEmployeeCode || r.employeeCode || '')
+      const name = normalizeSearch(r.employeeName || '')
+      const dept = normalizeSearch(r.displayDepartment || r.department || '')
+      return code.includes(term) || name.includes(term) || dept.includes(term)
+    })
+
+    return filtered.map(r => {
+      const dailyMap = {}
+      let calcTotal = 0
+      monthDaysHeader.forEach(({ dayStr }) => {
+        const dateKey = `${month}-${dayStr}`
+        const dayObj = r.days?.get ? r.days.get(dateKey) : null
+        let code = ''
+        if (dayObj) {
+          code = String(dayCode(dayObj) || (dayObj.workdays > 0 ? dayObj.workdays : '') || '')
+          if (!code && dayObj.isHoliday) code = 'Lễ'
+        }
+        dailyMap[dayStr] = code
+        const num = parseFloat(code)
+        if (!isNaN(num)) calcTotal += num
+        else if (code === 'P1' || code === 'P') calcTotal += 1.0
+      })
+      return {
+        employeeId: r.employeeId,
+        code: r.displayEmployeeCode || r.employeeCode || '',
+        name: r.employeeName || '',
+        position: r.position || r.chuc_vu || r.displayDepartment || '',
+        dailyMap,
+        totalCong: r.workdays != null ? Number(r.workdays).toFixed(2) : (calcTotal ? calcTotal.toFixed(2) : '0.00')
+      }
+    })
+  }, [rows, month, monthDaysHeader, excelSearch])
 
   const applySnapshot = useCallback((snapshot, nextMonth) => {
     if (!snapshot?.rows) {
@@ -196,20 +271,20 @@ function AttendancePreview() {
       return
     }
     try {
-      const data = await fbGet(`hr/attendanceMonthConfirmations/${targetMonth}`)
+      const data = await fbGet(`hr/attendanceMonthConfirmations/${targetMonth}`, companyId)
       setConfirmations(data && typeof data === 'object' ? data : {})
     } catch (requestError) {
       console.warn('Không tải được xác nhận bảng công:', requestError)
       setConfirmations({})
     }
-  }, [])
+  }, [companyId])
 
   const loadSummaryIndex = useCallback(async () => {
-    const ids = await fbListCollectionIds('attendanceMonthSummaries')
+    const ids = await fbListCollectionIds('attendanceMonthSummaries', companyId)
     const months = ids.filter(value => /^\d{4}-\d{2}$/.test(value)).sort().reverse()
     setSummaryMonths(months)
     return months
-  }, [])
+  }, [companyId])
 
   const loadMonthSnapshot = useCallback(async (targetMonth) => {
     if (!targetMonth) return
@@ -217,8 +292,8 @@ function AttendancePreview() {
     setError('')
     try {
       const [snapshot, storedSettings] = await Promise.all([
-        fbGet(`hr/attendanceMonthSummaries/${targetMonth}`),
-        fbGet('hr/attendanceSettings/default'),
+        fbGet(`hr/attendanceMonthSummaries/${targetMonth}`, companyId),
+        fbGet('hr/attendanceSettings/default', companyId),
         loadConfirmations(targetMonth)
       ])
       setAttendanceSettings(normalizeAttendanceShiftSettings(storedSettings))
@@ -231,36 +306,59 @@ function AttendancePreview() {
     } finally {
       setLoading(false)
     }
-  }, [applySnapshot, loadConfirmations])
+  }, [applySnapshot, companyId, loadConfirmations])
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       setLoading(true)
+      setLoadedCompanyId('')
       setError('')
       try {
         const months = await loadSummaryIndex()
         if (cancelled) return
         const current = currentMonthValue()
-        const initialMonth = months.includes(current) ? current : (months[0] || current)
-        const [initialSnapshot, storedSettings] = await Promise.all([
-          fbGet(`hr/attendanceMonthSummaries/${initialMonth}`),
-          fbGet('hr/attendanceSettings/default'),
+        const snapshots = await Promise.all(
+          months.map(value => fbGet(`hr/attendanceMonthSummaries/${value}`, companyId))
+        )
+        const currentIndex = months.indexOf(current)
+        const currentSnapshot = currentIndex >= 0 ? snapshots[currentIndex] : null
+        const nonEmptyIndex = snapshots.findIndex(snapshot =>
+          Number(snapshot?.sourceLogCount || 0) > 0 ||
+          (snapshot?.rows || []).some(row => Number(row?.workdays || 0) > 0)
+        )
+        const initialIndex = currentSnapshot && (
+          Number(currentSnapshot.sourceLogCount || 0) > 0 ||
+          (currentSnapshot.rows || []).some(row => Number(row?.workdays || 0) > 0)
+        )
+          ? currentIndex
+          : (nonEmptyIndex >= 0 ? nonEmptyIndex : (currentIndex >= 0 ? currentIndex : 0))
+        const initialMonth = months[initialIndex] || current
+        const initialSnapshot = snapshots[initialIndex] || null
+        const [resolvedSnapshot, storedSettings] = await Promise.all([
+          initialSnapshot
+            ? Promise.resolve(initialSnapshot)
+            : fbGet(`hr/attendanceMonthSummaries/${initialMonth}`, companyId),
+          fbGet('hr/attendanceSettings/default', companyId),
           loadConfirmations(initialMonth)
         ])
         if (cancelled) return
         setAttendanceSettings(normalizeAttendanceShiftSettings(storedSettings))
         setMonth(initialMonth)
-        applySnapshot(initialSnapshot, initialMonth)
+        applySnapshot(resolvedSnapshot, initialMonth)
+        setLoadedCompanyId(companyId)
       } catch (requestError) {
         console.error('Không tải được danh sách bảng công:', requestError)
-        if (!cancelled) setError('Không thể tải dữ liệu bảng công.')
+        if (!cancelled) {
+          setError('Không thể tải dữ liệu bảng công.')
+          setLoadedCompanyId(companyId)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
     })()
     return () => { cancelled = true }
-  }, [applySnapshot, loadConfirmations, loadSummaryIndex])
+  }, [applySnapshot, companyId, loadConfirmations, loadSummaryIndex])
 
   const handleMonthChange = async (nextMonth) => {
     setMonth(nextMonth)
@@ -276,8 +374,8 @@ function AttendancePreview() {
     setExcelPageSize(EXCEL_DETAIL_PAGE_SIZE)
     try {
       const [logsData, empData] = await Promise.all([
-        fbGetAttendanceLogsByMonth(targetMonth),
-        fbGetEmployeesDirectory()
+        fbGetAttendanceLogsByMonth(targetMonth, companyId),
+        fbGetEmployeesDirectory(companyId)
       ])
       const employeesById = new Map(
         (empData
@@ -324,6 +422,7 @@ function AttendancePreview() {
           STT: index + 1,
           'Mã NV': log.displayEmployeeCode || log.sourceEmployeeCode || log.employeeCode || '',
           'Họ tên': log.employeeName || '',
+          'Công ty': companyName,
           'Tên máy CC': log.machineName || log.tenTheoMayChamCong || '',
           'Phòng ban': log.department || log.phongBan || '',
           Ngày: dateStr
@@ -385,6 +484,42 @@ function AttendancePreview() {
     [excelPageSize, excelSafePage, filteredExcelLogs]
   )
 
+  const handleDownloadSummaryPdf = () => {
+    if (!rows.length) {
+      alert('Chưa có dữ liệu bảng công tổng hợp để xuất PDF.')
+      return
+    }
+
+    const headers = [
+      'STT', 'Họ tên', 'Công ty', 'Bộ phận', 'Ca làm', 'Tổng công',
+      'Notes', 'Tăng ca', 'Phép sử dụng', 'Công làm lễ', 'Công lễ'
+    ]
+    const reportRows = rows.map((row, index) => [
+      index + 1,
+      row.employeeName || '-',
+      companyName,
+      row.displayDepartment || row.department || '-',
+      row.shift || '-',
+      row.workdays != null && row.workdays !== '' ? Number(row.workdays).toFixed(2) : '0.00',
+      row.notes || '-',
+      row.overtimeHours ?? '-',
+      row.paidLeaveWorkdays ?? '-',
+      row.congLamLe ?? row.holidayWorkdays ?? '-',
+      row.congLe ?? '-'
+    ])
+
+    openAttendancePrintWindow({
+      title: `Bảng công tổng hợp tháng ${month}`,
+      companyName,
+      month,
+      filterLabel: 'Tất cả nhân sự',
+      exportedAt: new Date().toLocaleString('vi-VN'),
+      headers,
+      rows: reportRows,
+      tableMode: 'list'
+    })
+  }
+
   useEffect(() => {
     setExcelPage(1)
   }, [excelSearch, excelPageSize])
@@ -396,9 +531,11 @@ function AttendancePreview() {
   const handleOpenImport = async () => {
     try {
       const [empData, logsData, storedSettings] = await Promise.all([
-        fbGetEmployeesDirectory(),
-        fbGetAttendanceLogsByMonth(month || currentMonthValue()),
-        fbGet('hr/attendanceSettings/default')
+        fbGetEmployeesDirectory(companyId),
+        // Nạp toàn bộ log để chống tạo bản ghi trùng khi file có tháng khác
+        // tháng đang chọn trên màn hình (tháng sẽ được nhận diện từ file).
+        fbGet('hr/attendanceLogs', companyId),
+        fbGet('hr/attendanceSettings/default', companyId)
       ])
       setAttendanceSettings(normalizeAttendanceShiftSettings(storedSettings))
       if (empData) {
@@ -427,11 +564,11 @@ function AttendancePreview() {
     }
 
     const [employeeData, logData, nextAdjustments, nextManuals, storedSettings] = await Promise.all([
-      fbGetEmployeesDirectory(),
-      fbGetAttendanceLogsByMonth(targetMonth),
-      fbGet(`hr/attendanceAdjustments/${targetMonth}`),
-      fbGet(`hr/manualWorkdays/${targetMonth}`),
-      fbGet('hr/attendanceSettings/default')
+      fbGetEmployeesDirectory(companyId),
+      fbGetAttendanceLogsByMonth(targetMonth, companyId),
+      fbGet(`hr/attendanceAdjustments/${targetMonth}`, companyId),
+      fbGet(`hr/manualWorkdays/${targetMonth}`, companyId),
+      fbGet('hr/attendanceSettings/default', companyId)
     ])
     const nextAttendanceSettings = normalizeAttendanceShiftSettings(storedSettings)
     setAttendanceSettings(nextAttendanceSettings)
@@ -449,14 +586,18 @@ function AttendancePreview() {
       manualWorkdays: nextManuals || {},
       attendanceSettings: nextAttendanceSettings
     })
+    const validEmpIds = new Set(employeeList.map(e => String(e.id)))
+    const filteredSummaryRows = summaryRows.filter(row => validEmpIds.has(String(row.employeeId)))
     const snapshot = {
       month: targetMonth,
+      companyId,
+      companyName,
       generatedAt: new Date().toISOString(),
       sourceLogCount: monthLogs.length,
-      employeeCount: summaryRows.length,
-      rows: serializeAttendanceSummaryRows(summaryRows)
+      employeeCount: filteredSummaryRows.length,
+      rows: serializeAttendanceSummaryRows(filteredSummaryRows)
     }
-    await fbSet(`hr/attendanceMonthSummaries/${targetMonth}`, snapshot)
+    await fbSet(`hr/attendanceMonthSummaries/${targetMonth}`, snapshot, companyId)
     applySnapshot(snapshot, targetMonth)
     setSummaryMonths(prev => {
       const next = new Set(prev)
@@ -467,11 +608,11 @@ function AttendancePreview() {
       alert(`Đã lưu bảng công tháng ${targetMonth} (${summaryRows.length} nhân viên).`)
     }
     return snapshot
-  }, [applySnapshot])
+  }, [applySnapshot, companyId, companyName])
 
-  const handleImportComplete = async () => {
+  const handleImportComplete = async (importedMonth = '') => {
     setIsImportOpen(false)
-    const targetMonth = month || currentMonthValue()
+    const targetMonth = importedMonth || month || currentMonthValue()
     setSummarizing(true)
     setError('')
     try {
@@ -522,7 +663,7 @@ function AttendancePreview() {
     setConfirmations(next)
     setConfirmSaving(true)
     try {
-      await fbSet(`hr/attendanceMonthConfirmations/${targetMonth}`, next)
+      await fbSet(`hr/attendanceMonthConfirmations/${targetMonth}`, next, companyId)
     } catch (requestError) {
       console.error('Không lưu được xác nhận:', requestError)
       setConfirmations(previous)
@@ -543,7 +684,7 @@ function AttendancePreview() {
     setConfirmations(next)
     setConfirmSaving(true)
     try {
-      await fbSet(`hr/attendanceMonthConfirmations/${targetMonth}`, next)
+      await fbSet(`hr/attendanceMonthConfirmations/${targetMonth}`, next, companyId)
     } catch (requestError) {
       console.error('Không lưu được xác nhận:', requestError)
       setConfirmations(previous)
@@ -570,8 +711,9 @@ function AttendancePreview() {
       end: Math.min(start + 6, calendar.length)
     }))
     const checks = [
-      ['Đi muộn', day => day?.late],
-      ['Không chấm công', day => day?.missingPunch],
+      // Yêu cầu 8: Tạm thời vô hiệu hóa các kết luận tự suy đoán (Đi muộn, Không chấm công)
+      // ['Đi muộn', day => day?.late],
+      // ['Không chấm công', day => day?.missingPunch],
       ['Nghỉ không phép', day => day?.unapprovedAbsence]
     ]
 
@@ -661,13 +803,14 @@ function AttendancePreview() {
     return `${sample.standardCheckIn} - ${sample.standardCheckOut}`
   }, [detailDays])
 
-  if (loading) return <div className="attendance-preview-state">Đang tải bảng công đã tổng hợp...</div>
+  if (loading || loadedCompanyId !== companyId) return <div className="attendance-preview-state">Đang tải bảng công đã tổng hợp...</div>
   if (error && !hasSnapshot) return <div className="attendance-preview-state is-error">{error}</div>
 
   return <div className="attendance-preview-page">
     <header>
       <div>
         <h1>Bảng công {month}</h1>
+        <p className="attendance-company-context">Công ty: <strong>{companyName}</strong></p>
         <p>
           {hasSnapshot
             ? `Đã lưu lúc ${formatGeneratedAt(generatedAt)}${sourceLogCount ? ` · ${sourceLogCount} bản ghi chấm công` : ''}`
@@ -719,6 +862,17 @@ function AttendancePreview() {
             {summarizing ? 'Đang lưu...' : 'Tổng hợp lại'}
           </button>
         )}
+        {hasSnapshot && (
+          <button
+            type="button"
+            className="attendance-preview-pdf-btn"
+            onClick={handleDownloadSummaryPdf}
+            disabled={summarizing || !rows.length}
+            title={`Xuất bảng công tổng hợp tháng ${month} dưới dạng PDF`}
+          >
+            Tải PDF
+          </button>
+        )}
       </div>
     </header>
 
@@ -746,14 +900,15 @@ function AttendancePreview() {
                 </label>
               </th>
               <th>Họ tên</th>
+              <th>Công ty</th>
               <th>Bộ phận</th>
               <th>Ca làm</th>
+              <th>Tổng công</th>
               <th>Notes</th>
               <th>Tăng ca</th>
               <th>Phép sử dụng</th>
               <th>Công làm lễ</th>
               <th>Công lễ</th>
-              <th>Tổng công</th>
             </tr>
           </thead>
           <tbody>
@@ -777,16 +932,17 @@ function AttendancePreview() {
                 >
                   {row.employeeName}
                 </td>
+                <td>{companyName}</td>
                 {departmentRowSpans[index] > 0 && (
                   <td rowSpan={departmentRowSpans[index]}>{row.displayDepartment}</td>
                 )}
                 <td>{row.shift}</td>
-                <td>{row.lateCount ? `${row.lateCount} lần (${row.lateMinutes}p)` : ''}</td>
+                <td>{row.workdays != null && row.workdays !== '' ? Number(row.workdays).toFixed(2) : ''}</td>
+                <td>{row.notes || ''}</td>
                 <td>{row.overtimeHours || ''}</td>
                 <td>{row.paidLeaveWorkdays || ''}</td>
                 <td></td>
                 <td></td>
-                <td>{row.workdays || ''}</td>
               </tr>
             ))}
           </tbody>
@@ -803,13 +959,14 @@ function AttendancePreview() {
                   <th>STT</th>
                   <th>Mã NV</th>
                   <th>Nhân sự</th>
+                  <th>Công ty</th>
                   {weekLabels.map(label => <th key={label}>{label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {weeklyPeople.length === 0 ? (
                   <tr>
-                    <td colSpan={3 + weekLabels.length} className="weeks-empty">Không có phát sinh theo tuần</td>
+                    <td colSpan={4 + weekLabels.length} className="weeks-empty">Không có phát sinh theo tuần</td>
                   </tr>
                 ) : (
                   weeklyPeople.map((person, index) => (
@@ -817,6 +974,7 @@ function AttendancePreview() {
                       <td>{index + 1}</td>
                       <td className="employee-code">{person.employeeCode || '-'}</td>
                       <td className="name">{person.employeeName}</td>
+                      <td>{companyName}</td>
                       {person.weeks.map(week => (
                         <td key={week.label} className={week.flags.length ? 'has-issue' : ''}>
                           {week.flags.length ? week.flags.join(' · ') : '—'}
@@ -829,7 +987,7 @@ function AttendancePreview() {
             </table>
           </div>
         </section>
-        <section className="attendance-preview-legend"><strong>Chú thích:</strong><span>X: Nghỉ theo lịch/không phép theo trạng thái</span><span>P1: Nghỉ phép năm</span><span>1 / 0.5: Công trong ngày</span></section>
+        <section className="attendance-preview-legend"><strong>Chú thích:</strong><span>X: Nghỉ theo lịch/không phép theo trạng thái</span><span>P1: Nghỉ phép năm</span><span>1 / 0.5: Công trong ngày</span><span>Lễ: Ngày lễ cấu hình, không tự tính công</span></section>
       </>
     )}
     {isImportOpen && (
@@ -840,6 +998,8 @@ function AttendancePreview() {
         employees={importEmployees}
         attendanceLogs={importLogs}
         attendanceSettings={attendanceSettings}
+        companyId={companyId}
+        companyName={companyName}
       />
     )}
     {detailRow && (
@@ -852,6 +1012,7 @@ function AttendancePreview() {
                 {detailRow.employeeCode ? `${detailRow.employeeCode} · ` : ''}
                 {detailRow.displayDepartment || detailRow.department || ''}
                 {detailRow.shift ? ` · ${detailRow.shift}` : ''}
+                {` · ${companyName}`}
                 {` · Tháng ${month}`}
               </p>
             </div>
@@ -921,11 +1082,29 @@ function AttendancePreview() {
           <div className="attendance-excel-detail-head">
             <div>
               <h2>Bảng chi tiết từ Excel</h2>
+              <div className="attendance-detail-mode-tabs">
+                <button
+                  type="button"
+                  className={detailViewMode === 'matrix' ? 'is-active' : ''}
+                  onClick={() => setDetailViewMode('matrix')}
+                >
+                  Ma trận ngày (01 - 31)
+                </button>
+                <button
+                  type="button"
+                  className={detailViewMode === 'list' ? 'is-active' : ''}
+                  onClick={() => setDetailViewMode('list')}
+                >
+                  Nhật ký theo dòng
+                </button>
+              </div>
               <p>
                 Tháng {month}
-                {excelLogsLoading
-                  ? ' · Đang tải...'
-                  : ` · ${filteredExcelLogs.length}/${excelLogs.length} dòng`}
+                {detailViewMode === 'matrix'
+                  ? ` · ${matrixRows.length} nhân viên`
+                  : excelLogsLoading
+                    ? ' · Đang tải...'
+                    : ` · ${filteredExcelLogs.length}/${excelLogs.length} dòng`}
               </p>
             </div>
             <div className="attendance-excel-detail-tools">
@@ -940,142 +1119,213 @@ function AttendancePreview() {
                 className="attendance-excel-download-btn"
                 onClick={handleDownloadExcelDetail}
                 disabled={excelLogsLoading || !filteredExcelLogs.length}
+                title={`Tải dữ liệu chấm công tháng ${month} của ${companyName} xuống Excel`}
               >
                 Tải Excel
               </button>
               <button type="button" onClick={() => setIsExcelDetailOpen(false)}>Đóng</button>
             </div>
           </div>
-          <div className="attendance-excel-detail-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>STT</th>
-                  <th>Mã NV</th>
-                  <th>Họ tên</th>
-                  <th>Tên máy CC</th>
-                  <th>Phòng ban</th>
-                  <th>Ngày</th>
-                  <th>Thứ</th>
-                  <th>Vào</th>
-                  <th>Ra</th>
-                  <th>Công</th>
-                  <th>Giờ</th>
-                  <th>Công+</th>
-                  <th>Vào trễ</th>
-                  <th>Ra sớm</th>
-                  <th>TC1</th>
-                  <th>TC2</th>
-                  <th>TC3</th>
-                  <th>Ca</th>
-                  <th>KH</th>
-                  <th>KH+</th>
-                  <th>Tổng giờ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {excelLogsLoading ? (
-                  <tr>
-                    <td colSpan="21" className="empty">Đang tải bảng chi tiết...</td>
+
+          {detailViewMode === 'matrix' ? (
+            <div className="attendance-excel-detail-scroll attendance-matrix-scroll">
+              <table className="attendance-matrix-table">
+                <thead>
+                  <tr className="matrix-group-row">
+                    <th rowSpan="2" className="col-stt">STT</th>
+                    <th rowSpan="2" className="col-code">Mã nhân viên</th>
+                    <th rowSpan="2" className="col-name">Họ và tên</th>
+                    <th rowSpan="2" className="col-company">Công ty</th>
+                    <th rowSpan="2" className="col-pos">Chức vụ</th>
+                    <th colSpan={monthDaysHeader.length} className="matrix-month-title">
+                      Ngày trong tháng
+                    </th>
+                    <th rowSpan="2" className="col-total">Tổng công</th>
                   </tr>
-                ) : visibleExcelLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan="21" className="empty">
-                      Chưa có dữ liệu Excel cho tháng này. Hãy dùng “Tải Excel & Lưu bảng công”.
-                    </td>
-                  </tr>
-                ) : (
-                  visibleExcelLogs.map((log, index) => {
-                    const dateStr = log.date ? String(log.date).slice(0, 10) : ''
-                    const hours = Number(log.hours ?? log.soGio ?? log.gio ?? 0) || 0
-                    const gioPlus = Number(log.gioPlus ?? 0) || 0
-                    const tongGio = Number(log.tongGio ?? hours + gioPlus) || 0
-                    const late = Number(log.lateMinutes ?? log.vaoTre ?? 0) || 0
-                    const early = Number(log.earlyMinutes ?? log.raSom ?? 0) || 0
-                    return (
-                      <tr key={log.id || `${log.employeeId}-${dateStr}-${index}`}>
-                        <td>{excelPageStart + index}</td>
-                        <td>{log.displayEmployeeCode || log.sourceEmployeeCode || log.employeeCode || '-'}</td>
-                        <td>{log.employeeName || '-'}</td>
-                        <td>{log.machineName || log.tenTheoMayChamCong || '-'}</td>
-                        <td>{log.department || log.phongBan || '-'}</td>
-                        <td>
-                          {dateStr
-                            ? new Date(`${dateStr}T00:00:00`).toLocaleDateString('vi-VN')
-                            : '-'}
-                        </td>
-                        <td>{log.dayOfWeek || log.thu || dayOfWeekFromDate(dateStr) || '-'}</td>
-                        <td>{formatTimeHM(log.vao || log.checkIn) || '-'}</td>
-                        <td>{formatTimeHM(log.ra || log.checkOut) || '-'}</td>
-                        <td>{log.cong ?? '-'}</td>
-                        <td>{hours ? hours.toFixed(1) : '-'}</td>
-                        <td>{log.congPlus ?? '-'}</td>
-                        <td className={late > 0 ? 'is-late' : ''}>{late > 0 ? `${late}p` : '-'}</td>
-                        <td className={early > 0 ? 'is-early' : ''}>{early > 0 ? `${early}p` : '-'}</td>
-                        <td>{log.tc1 ?? '-'}</td>
-                        <td>{log.tc2 ?? '-'}</td>
-                        <td>{log.tc3 ?? '-'}</td>
-                        <td>{log.profileShift || log.shiftName || log.tenCa || '-'}</td>
-                        <td>{log.kyHieu || log.status || '-'}</td>
-                        <td>{log.kyHieuPlus || '-'}</td>
-                        <td><strong>{tongGio ? tongGio.toFixed(1) : '-'}</strong></td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          {filteredExcelLogs.length > 0 && (
-            <div className="attendance-excel-detail-pager">
-              <div className="attendance-excel-detail-pager__info">
-                Hiển thị {excelPageStart}–{excelPageEnd} / {filteredExcelLogs.length} dòng
-              </div>
-              <div className="attendance-excel-detail-pager__controls">
-                <label>
-                  Mỗi trang
-                  <select
-                    value={excelPageSize}
-                    onChange={event => setExcelPageSize(Number(event.target.value) || EXCEL_DETAIL_PAGE_SIZE)}
-                  >
-                    {EXCEL_DETAIL_PAGE_SIZE_OPTIONS.map(size => (
-                      <option key={size} value={size}>{size}</option>
+                  <tr className="matrix-days-row">
+                    {monthDaysHeader.map(d => (
+                      <th
+                        key={d.dayStr}
+                        className={`day-col ${d.isSunday ? 'is-sunday' : ''} ${d.isSaturday ? 'is-saturday' : ''}`}
+                      >
+                        <div className="day-number">{d.dayStr}</div>
+                        <div className="day-dow">{d.dow}</div>
+                      </th>
                     ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  disabled={excelSafePage <= 1}
-                  onClick={() => setExcelPage(1)}
-                >
-                  «
-                </button>
-                <button
-                  type="button"
-                  disabled={excelSafePage <= 1}
-                  onClick={() => setExcelPage(page => Math.max(1, page - 1))}
-                >
-                  Trước
-                </button>
-                <span className="attendance-excel-detail-pager__page">
-                  Trang {excelSafePage}/{excelTotalPages}
-                </span>
-                <button
-                  type="button"
-                  disabled={excelSafePage >= excelTotalPages}
-                  onClick={() => setExcelPage(page => Math.min(excelTotalPages, page + 1))}
-                >
-                  Sau
-                </button>
-                <button
-                  type="button"
-                  disabled={excelSafePage >= excelTotalPages}
-                  onClick={() => setExcelPage(excelTotalPages)}
-                >
-                  »
-                </button>
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={monthDaysHeader.length + 6} className="empty">
+                        Chưa có dữ liệu bảng công cho tháng {month}.
+                      </td>
+                    </tr>
+                  ) : (
+                    matrixRows.map((emp, idx) => (
+                      <tr key={emp.employeeId || emp.code || idx}>
+                        <td className="col-stt">{idx + 1}</td>
+                        <td className="col-code font-bold">{emp.code || '-'}</td>
+                        <td className="col-name font-semibold">{emp.name || '-'}</td>
+                        <td className="col-company">{companyName}</td>
+                        <td className="col-pos">{emp.position || '-'}</td>
+                        {monthDaysHeader.map(d => {
+                          const val = emp.dailyMap[d.dayStr] || ''
+                          const isOff = val === '0' || d.isSunday
+                          const isHoliday = val === 'Lễ'
+                          return (
+                            <td
+                              key={d.dayStr}
+                              className={`matrix-cell ${isOff ? 'is-off' : ''} ${val === '1' ? 'is-work' : ''} ${isHoliday ? 'is-holiday' : ''}`}
+                              title={isHoliday ? 'Ngày lễ cấu hình — không tự tính công' : undefined}
+                            >
+                              {val}
+                            </td>
+                          )
+                        })}
+                        <td className="col-total font-bold">{emp.totalCong}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
+          ) : (
+            <>
+              <div className="attendance-excel-detail-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>STT</th>
+                      <th>Mã NV</th>
+                      <th>Họ tên</th>
+                      <th>Công ty</th>
+                      <th>Tên máy CC</th>
+                      <th>Phòng ban</th>
+                      <th>Ngày</th>
+                      <th>Thứ</th>
+                      <th>Vào</th>
+                      <th>Ra</th>
+                      <th>Công</th>
+                      <th>Giờ</th>
+                      <th>Công+</th>
+                      <th>Vào trễ</th>
+                      <th>Ra sớm</th>
+                      <th>TC1</th>
+                      <th>TC2</th>
+                      <th>TC3</th>
+                      <th>Ca</th>
+                      <th>KH</th>
+                      <th>KH+</th>
+                      <th>Tổng giờ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {excelLogsLoading ? (
+                      <tr>
+                        <td colSpan="22" className="empty">Đang tải bảng chi tiết...</td>
+                      </tr>
+                    ) : visibleExcelLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan="22" className="empty">
+                          Chưa có dữ liệu Excel cho tháng này. Hãy dùng “Tải Excel & Lưu bảng công”.
+                        </td>
+                      </tr>
+                    ) : (
+                      visibleExcelLogs.map((log, index) => {
+                        const dateStr = log.date ? String(log.date).slice(0, 10) : ''
+                        const hours = Number(log.hours ?? log.soGio ?? log.gio ?? 0) || 0
+                        const gioPlus = Number(log.gioPlus ?? 0) || 0
+                        const tongGio = Number(log.tongGio ?? hours + gioPlus) || 0
+                        const late = Number(log.lateMinutes ?? log.vaoTre ?? 0) || 0
+                        const early = Number(log.earlyMinutes ?? log.raSom ?? 0) || 0
+                        return (
+                          <tr key={log.id || `${log.employeeId}-${dateStr}-${index}`}>
+                            <td>{excelPageStart + index}</td>
+                            <td>{log.displayEmployeeCode || log.sourceEmployeeCode || log.employeeCode || '-'}</td>
+                            <td>{log.employeeName || '-'}</td>
+                            <td>{companyName}</td>
+                            <td>{log.machineName || log.tenTheoMayChamCong || '-'}</td>
+                            <td>{log.department || log.phongBan || '-'}</td>
+                            <td>
+                              {dateStr
+                                ? new Date(`${dateStr}T00:00:00`).toLocaleDateString('vi-VN')
+                                : '-'}
+                            </td>
+                            <td>{log.dayOfWeek || log.thu || dayOfWeekFromDate(dateStr) || '-'}</td>
+                            <td>{formatTimeHM(log.vao || log.checkIn) || '-'}</td>
+                            <td>{formatTimeHM(log.ra || log.checkOut) || '-'}</td>
+                            <td>{log.cong ?? '-'}</td>
+                            <td>{hours ? hours.toFixed(2) : '-'}</td>
+                            <td>{log.congPlus ?? '-'}</td>
+                            <td className={late > 0 ? 'is-late' : ''}>{late > 0 ? `${late}p` : '-'}</td>
+                            <td className={early > 0 ? 'is-early' : ''}>{early > 0 ? `${early}p` : '-'}</td>
+                            <td>{log.tc1 ?? '-'}</td>
+                            <td>{log.tc2 ?? '-'}</td>
+                            <td>{log.tc3 ?? '-'}</td>
+                            <td>{log.profileShift || log.shiftName || log.tenCa || '-'}</td>
+                            <td>{log.kyHieu || log.status || '-'}</td>
+                            <td>{log.kyHieuPlus || '-'}</td>
+                            <td><strong>{tongGio ? tongGio.toFixed(2) : '-'}</strong></td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {filteredExcelLogs.length > 0 && (
+                <div className="attendance-excel-detail-pager">
+                  <div className="attendance-excel-detail-pager__info">
+                    Hiển thị {excelPageStart}–{excelPageEnd} / {filteredExcelLogs.length} dòng
+                  </div>
+                  <div className="attendance-excel-detail-pager__controls">
+                    <label>
+                      Mỗi trang
+                      <select
+                        value={excelPageSize}
+                        onChange={event => setExcelPageSize(Number(event.target.value) || EXCEL_DETAIL_PAGE_SIZE)}
+                      >
+                        {EXCEL_DETAIL_PAGE_SIZE_OPTIONS.map(size => (
+                          <option key={size} value={size}>{size}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={excelSafePage <= 1}
+                      onClick={() => setExcelPage(1)}
+                    >
+                      «
+                    </button>
+                    <button
+                      type="button"
+                      disabled={excelSafePage <= 1}
+                      onClick={() => setExcelPage(page => Math.max(1, page - 1))}
+                    >
+                      Trước
+                    </button>
+                    <span className="attendance-excel-detail-pager__page">
+                      Trang {excelSafePage}/{excelTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={excelSafePage >= excelTotalPages}
+                      onClick={() => setExcelPage(page => Math.min(excelTotalPages, page + 1))}
+                    >
+                      Sau
+                    </button>
+                    <button
+                      type="button"
+                      disabled={excelSafePage >= excelTotalPages}
+                      onClick={() => setExcelPage(excelTotalPages)}
+                    >
+                      »
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

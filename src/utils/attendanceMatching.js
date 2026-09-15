@@ -24,7 +24,6 @@ const compactWithoutCommonMiddleNames = (value) => {
     )
     .join('')
 }
-
 const levenshteinDistance = (left, right) => {
   if (left === right) return 0
   if (!left) return right.length
@@ -47,7 +46,6 @@ const levenshteinDistance = (left, right) => {
 
   return previous[right.length]
 }
-
 const similarity = (left, right) => {
   if (!left || !right) return 0
   return 1 - levenshteinDistance(left, right) / Math.max(left.length, right.length)
@@ -110,10 +108,16 @@ const scoreCandidate = (sourceCode, sourceName, employee) => {
   let score = Math.max(fullNameScore, withoutMiddleScore)
   let method = withoutMiddleScore > fullNameScore ? 'Bỏ qua tên đệm phổ biến' : 'Tên gần giống'
 
+  const isPlaceholderName =
+    !sourceNameCompact ||
+    sourceNameCompact === `nv${sourceCodeCompact}` ||
+    sourceNameCompact === sourceCodeCompact ||
+    /^nv\d+$/i.test(sourceNameCompact)
+
   if (exactCode && exactName) {
     score = 1
-    method = 'Mã và tên trùng hồ sơ Lumi'
-  } else if (exactCode && !sourceNameCompact) {
+    method = 'Mã và tên trùng hồ sơ'
+  } else if (exactCode && isPlaceholderName) {
     score = 1
     method = 'Mã nhân viên trùng'
   } else if (
@@ -141,6 +145,7 @@ const scoreCandidate = (sourceCode, sourceName, employee) => {
     exactName,
     exactCode,
     hasSourceName: Boolean(sourceNameCompact),
+    isPlaceholderName,
     givenNameCompatible
   }
 }
@@ -166,7 +171,9 @@ export const rankEmployeeMatches = (
       right.score - left.score ||
       Number(right.exactCode && right.exactName) -
         Number(left.exactCode && left.exactName) ||
-      Number(right.exactName) - Number(left.exactName)
+      Number(right.exactName) - Number(left.exactName) ||
+      Number(right.exactCode) - Number(left.exactCode) ||
+      Number(right.givenNameCompatible) - Number(left.givenNameCompatible)
     )
 }
 
@@ -180,7 +187,7 @@ export const matchAttendanceEmployee = (
   const best = ranked[0] || null
   const second = ranked[1] || null
   const confidence = best?.score || 0
-  const gap = best ? confidence - (second?.score || 0) : 0
+  const gap = best ? Math.max(0, confidence - (second?.score || 0)) : 0
   const uniqueExactName = best?.exactName && !second?.exactName
   const autoMatched =
     Boolean(best) &&
@@ -189,6 +196,7 @@ export const matchAttendanceEmployee = (
       (best.exactCode && (
         best.exactName ||
         !best.hasSourceName ||
+        best.isPlaceholderName ||
         (best.givenNameCompatible && confidence >= 0.9)
       )) ||
       (best.givenNameCompatible && confidence >= 0.9 && gap >= 0.08)

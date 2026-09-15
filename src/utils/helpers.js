@@ -4,7 +4,6 @@ export const escapeHtml = (str) => {
   div.textContent = str
   return div.innerHTML
 }
-
 export const formatMoney = (n) => {
   try {
     if (n === null || n === undefined || isNaN(n)) return '0 đ'
@@ -13,7 +12,6 @@ export const formatMoney = (n) => {
     return String(n || 0) + ' đ'
   }
 }
-
 
 
 // Display date as DD/MM/YYYY
@@ -103,11 +101,60 @@ export const USERS_DIRECTORY_COLUMNS = [
   'avatar_url'
 ].join(', ')
 
+export const EMPLOYMENT_STATUS_OPTIONS = Object.freeze([
+  'Thử việc',
+  'Chính thức',
+  'Tạm nghỉ',
+  'Nghỉ việc'
+])
+
+const normalizeStatusText = value => String(value || '').trim().toLocaleLowerCase('vi')
+
+/**
+ * employment_status là nguồn chính cho trạng thái nhân sự. Cột status cũ
+ * chỉ được dùng làm fallback khi nó thực sự chứa một trạng thái nhân sự;
+ * tuyệt đối không suy diễn rỗng thành “Chính thức” (hoặc bất kỳ trạng thái
+ * nào khác).
+ */
+export const getEmployeeEmploymentStatus = employee => {
+  if (!employee) return ''
+  const employmentFields = [
+    employee.trang_thai,
+    employee.employmentStatus,
+    employee.employment_status
+  ]
+  const hasAuthoritativeEmploymentField = [
+    'trang_thai',
+    'employmentStatus',
+    'employment_status'
+  ].some(field => Object.prototype.hasOwnProperty.call(employee, field))
+  if (hasAuthoritativeEmploymentField) {
+    const value = employmentFields.find(item => String(item || '').trim())
+    return value ? String(value).trim() : ''
+  }
+
+  const candidates = [employee.status, employee.tinh_trang]
+  const recognized = candidates.find(value => {
+    const normalized = normalizeStatusText(value)
+    return normalized && EMPLOYMENT_STATUS_OPTIONS.some(option => normalizeStatusText(option) === normalized)
+  })
+  if (recognized !== undefined) return String(recognized).trim()
+
+  // Giữ nguyên giá trị nghiệp vụ khác nếu có, nhưng không tạo giá trị mặc định.
+  const firstValue = candidates.find(value => String(value || '').trim())
+  return firstValue ? String(firstValue).trim() : ''
+}
+
 // Map Supabase DB columns (English) -> App State (Vietnamese)
 export const mapUserToApp = (user) => {
   if (!user) return null
+  const companyId = user.company_id ?? user.companyId ?? null
   return {
     id: user.id,
+    company_id: companyId,
+    companyId,
+    company_name: user.company_name || user.companyName || '',
+    companyName: user.companyName || user.company_name || '',
     employeeId: user.employee_id || '',
     ho_va_ten: user.name || '',
     email: user.email || '',
@@ -116,7 +163,10 @@ export const mapUserToApp = (user) => {
     bo_phan: user.department || '',
     vi_tri: user.position || '',
     trang_thai: user.employment_status || '',
+    employmentStatus: user.employment_status || '',
+    employment_status: user.employment_status || '',
     tinh_trang: user.status || '',
+    status: user.status || '',
     ca_lam_viec: user.shift || '',
     ngay_vao_lam: user.join_date || '',
     ngay_lam_chinh_thuc: user.official_date || '',
@@ -210,8 +260,10 @@ export const mapAppToUser = (data) => {
     branch: data.chi_nhanh || '',
     department: data.bo_phan || '',
     position: data.vi_tri || '',
-    employment_status: data.trang_thai || '',
-    status: data.tinh_trang || data.status || '',
+    // Rỗng phải được lưu rỗng để phân biệt với “Thử việc”; không tự suy diễn
+    // nhân sự chưa được HR đánh dấu thành “Chính thức”.
+    employment_status: data.trang_thai ?? data.employmentStatus ?? data.employment_status ?? '',
+    status: data.tinh_trang ?? data.status ?? '',
     shift: data.ca_lam_viec || '',
     join_date: formatDateForDB(data.ngay_vao_lam),
     official_date: formatDateForDB(data.ngay_lam_chinh_thuc),
@@ -241,6 +293,9 @@ export const mapAppToUser = (data) => {
     images: Array.isArray(data.images) ? data.images : [],
     role: data.role || 'user',
     username: (data.username || data.employeeId || data.employee_id || '').trim() || null,
+    ...((data.company_id || data.companyId)
+      ? { company_id: data.company_id || data.companyId }
+      : {}),
   }
 }
 
