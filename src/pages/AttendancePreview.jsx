@@ -15,6 +15,11 @@ import {
 } from '../utils/attendanceShift'
 import { getCompanyIdForUser, getCompanyNameForContext } from '../utils/companyContext'
 import { parseManualWorkdayInput, updateManualWorkdays } from '../utils/attendanceManual'
+import {
+  describeDayWorkFormula,
+  getAttendanceHoliday,
+  STANDARD_WORK_MINUTES
+} from '../utils/attendanceCalculations'
 import { canManageAttendance } from '../utils/staffAccess'
 import { openAttendancePrintWindow } from '../utils/attendancePdf'
 import './AttendancePreview.css'
@@ -249,16 +254,27 @@ function AttendancePreview() {
     const dowShort = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
     for (let d = 1; d <= daysInSelectedMonth; d++) {
       const date = new Date(y, m - 1, d)
+      const dayStr = String(d).padStart(2, '0')
+      const dateKey = `${month}-${dayStr}`
+      const holiday = getAttendanceHoliday(dateKey, attendanceSettings)
       days.push({
         day: d,
-        dayStr: String(d).padStart(2, '0'),
+        dayStr,
+        dateKey,
         dow: dowShort[date.getDay()],
         isSunday: date.getDay() === 0,
-        isSaturday: date.getDay() === 6
+        isSaturday: date.getDay() === 6,
+        isHoliday: Boolean(holiday),
+        holidayName: holiday?.name || ''
       })
     }
     return days
-  }, [month, daysInSelectedMonth])
+  }, [attendanceSettings, month, daysInSelectedMonth])
+
+  const matrixHolidayLegend = useMemo(
+    () => monthDaysHeader.filter(d => d.isHoliday),
+    [monthDaysHeader]
+  )
 
   const matrixRows = useMemo(() => {
     if (!rows || rows.length === 0) return []
@@ -270,19 +286,43 @@ function AttendancePreview() {
       const dept = normalizeSearch(r.displayDepartment || r.department || '')
       return code.includes(term) || name.includes(term) || dept.includes(term)
     })
+    const standardMinutes = Number(attendanceSettings?.standardWorkMinutes) || STANDARD_WORK_MINUTES
 
     return filtered.map(r => {
       const dailyMap = {}
       let calcTotal = 0
-      monthDaysHeader.forEach(({ dayStr }) => {
+      monthDaysHeader.forEach(({ day, dayStr, isHoliday, holidayName }) => {
         const dateKey = `${month}-${dayStr}`
-        const dayObj = r.days?.get ? r.days.get(dateKey) : null
+        const dayObj = r.days?.get ? r.days.get(dateKey) : (r.days?.[dateKey] || null)
+        const manualWorkday = manualWorkdays[String(r.employeeId)]?.[String(day)]
         let code = ''
         if (dayObj) {
           code = String(dayCode(dayObj) || (dayObj.workdays > 0 ? dayObj.workdays : '') || '')
-          if (!code && dayObj.isHoliday) code = 'Lễ'
+          if (!code && (dayObj.isHoliday || isHoliday)) code = 'Lễ'
+        } else if (isHoliday) {
+          code = 'Lễ'
         }
-        dailyMap[dayStr] = code
+        if (manualWorkday !== undefined && manualWorkday !== null && manualWorkday !== '') {
+          code = String(manualWorkday)
+        }
+        const formula = describeDayWorkFormula(
+          {
+            ...(dayObj || {}),
+            isHoliday: Boolean(dayObj?.isHoliday || isHoliday),
+            holidayName: dayObj?.holidayName || holidayName || '',
+            manualOverride: manualWorkday !== undefined && manualWorkday !== null && manualWorkday !== ''
+          },
+          { standardMinutes, displayCode: code }
+        )
+        dailyMap[dayStr] = {
+          code,
+          formula,
+          isHoliday: Boolean(dayObj?.isHoliday || isHoliday),
+          holidayName: dayObj?.holidayName || holidayName || '',
+          workdays: dayObj?.workdaysExact ?? dayObj?.workdays ?? '',
+          manualWorkday,
+          isManual: manualWorkday !== undefined && manualWorkday !== null && manualWorkday !== ''
+        }
         const num = parseFloat(code)
         if (!isNaN(num)) calcTotal += num
         else if (code === 'P1' || code === 'P') calcTotal += 1.0
@@ -296,7 +336,7 @@ function AttendancePreview() {
         totalCong: r.workdays != null ? Number(r.workdays).toFixed(2) : (calcTotal ? calcTotal.toFixed(2) : '0.00')
       }
     })
-  }, [rows, month, monthDaysHeader, excelSearch])
+  }, [attendanceSettings, rows, month, monthDaysHeader, excelSearch, manualWorkdays])
 
   const applySnapshot = useCallback((snapshot, nextMonth) => {
     if (!snapshot?.rows) {
@@ -1257,6 +1297,23 @@ function AttendancePreview() {
 
           {detailViewMode === 'matrix' ? (
             <div className="attendance-excel-detail-scroll attendance-matrix-scroll">
+              {canEditWorkdays && (
+                <div className="manual-workday-help matrix-edit-help">
+                  <strong>Chỉnh công trên ma trận:</strong> bấm vào ô ngày, nhập 0–1 rồi rời ô để lưu. Xóa giá trị để dùng lại công thức tự động.
+                  {manualNotice && <span>{manualNotice}</span>}
+                </div>
+              )}
+              {matrixHolidayLegend.length > 0 && (
+                <div className="matrix-holiday-legend">
+                  <strong>Ngày lễ tháng này:</strong>
+                  {matrixHolidayLegend.map(d => (
+                    <span key={d.dayStr}>
+                      {d.dayStr}/{String(month).slice(5)}
+                      {d.holidayName ? ` · ${d.holidayName}` : ''}
+                    </span>
+                  ))}
+                </div>
+              )}
               <table className="attendance-matrix-table">
                 <thead>
                   <tr className="matrix-group-row">
@@ -1274,10 +1331,11 @@ function AttendancePreview() {
                     {monthDaysHeader.map(d => (
                       <th
                         key={d.dayStr}
-                        className={`day-col ${d.isSunday ? 'is-sunday' : ''} ${d.isSaturday ? 'is-saturday' : ''}`}
+                        className={`day-col ${d.isSunday ? 'is-sunday' : ''} ${d.isSaturday ? 'is-saturday' : ''} ${d.isHoliday ? 'is-holiday' : ''}`}
+                        title={d.isHoliday ? (d.holidayName ? `Ngày lễ: ${d.holidayName}` : 'Ngày lễ') : undefined}
                       >
                         <div className="day-number">{d.dayStr}</div>
-                        <div className="day-dow">{d.dow}</div>
+                        <div className="day-dow">{d.isHoliday ? 'Lễ' : d.dow}</div>
                       </th>
                     ))}
                   </tr>
@@ -1298,16 +1356,33 @@ function AttendancePreview() {
                         <td className="col-company">{companyName}</td>
                         <td className="col-pos">{emp.position || '-'}</td>
                         {monthDaysHeader.map(d => {
-                          const val = emp.dailyMap[d.dayStr] || ''
-                          const isOff = val === '0' || d.isSunday
-                          const isHoliday = val === 'Lễ'
+                          const cell = emp.dailyMap[d.dayStr] || {}
+                          const val = cell.code || ''
+                          const isOff = val === '0' || (d.isSunday && !val)
+                          const isHoliday = Boolean(cell.isHoliday || d.isHoliday)
                           return (
                             <td
                               key={d.dayStr}
-                              className={`matrix-cell ${isOff ? 'is-off' : ''} ${val === '1' ? 'is-work' : ''} ${isHoliday ? 'is-holiday' : ''}`}
-                              title={isHoliday ? 'Ngày lễ cấu hình — không tự tính công' : undefined}
+                              className={`matrix-cell ${isOff ? 'is-off' : ''} ${val === '1' ? 'is-work' : ''} ${isHoliday ? 'is-holiday' : ''} ${cell.isManual ? 'is-manual' : ''} ${canEditWorkdays ? 'is-editable' : ''}`}
+                              title={cell.formula || (isHoliday ? (cell.holidayName || d.holidayName || 'Ngày lễ') : undefined)}
                             >
-                              {val}
+                              {canEditWorkdays ? (
+                                <ManualWorkdayInput
+                                  value={cell.isManual ? cell.manualWorkday : (cell.workdays !== '' ? cell.workdays : val)}
+                                  isManual={cell.isManual}
+                                  disabled={manualSavingKey === `${String(emp.employeeId)}:${d.day}`}
+                                  employeeName={emp.name}
+                                  date={`${month}-${d.dayStr}`}
+                                  onSave={value => handleSaveManualWorkday(emp.employeeId, d.day, value)}
+                                />
+                              ) : (
+                                <>
+                                  <span className="matrix-cell-value">{val}</span>
+                                  {cell.formula && (
+                                    <span className="matrix-cell-formula">{cell.formula}</span>
+                                  )}
+                                </>
+                              )}
                             </td>
                           )
                         })}
@@ -1317,6 +1392,12 @@ function AttendancePreview() {
                   )}
                 </tbody>
               </table>
+              <div className="matrix-formula-legend">
+                <strong>Công thức công ngày:</strong>
+                <span>Có Vào/Ra → phút(Vào→Ra) ÷ 480 (tối đa 1 công)</span>
+                <span>P1 = phép 1 công</span>
+                <span>Hover ô để xem công thức chi tiết</span>
+              </div>
             </div>
           ) : (
             <>

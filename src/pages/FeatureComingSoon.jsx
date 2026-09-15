@@ -6,8 +6,7 @@ const FEATURE_TITLES = {
   '/salary': 'Lương & Phúc lợi',
   '/competency': 'Khung năng lực',
   '/kpi': 'KPI',
-  '/tasks': 'Công việc',
-  '/approvals': 'Đề xuất'
+  '/tasks': 'Công việc'
 }
 
 function FeatureComingSoon() {

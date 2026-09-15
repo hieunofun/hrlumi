@@ -137,3 +137,63 @@ export const getAttendanceHoliday = (date, attendanceSettings = {}) => {
     .find(item => item.date === dateKey) || null
 }
 
+/**
+ * Mô tả công thức công ngày để hiện tooltip / chú thích trên bảng ma trận.
+ */
+export const describeDayWorkFormula = (day = {}, {
+  standardMinutes = STANDARD_WORK_MINUTES,
+  displayCode = ''
+} = {}) => {
+  const code = String(displayCode || '').trim().toUpperCase()
+  const standard = Math.max(1, finiteNumber(standardMinutes, STANDARD_WORK_MINUTES))
+  const checkIn = String(day.checkIn || day.vao || '').trim()
+  const checkOut = String(day.checkOut || day.ra || '').trim()
+  const workedMinutes = finiteNumber(
+    day.workedMinutes,
+    checkIn && checkOut
+      ? (calculateWorkedMinutes({ checkIn, checkOut }) || 0)
+      : finiteNumber(day.hoursExact ?? day.hours) * 60
+  )
+  const workdays = finiteNumber(day.workdaysExact ?? day.workdays)
+  const holidayLabel = day.holidayName
+    ? `Ngày lễ: ${day.holidayName}`
+    : (day.isHoliday ? 'Ngày lễ' : '')
+
+  if (day.manualOverride) {
+    return `Chỉnh tay: ${roundDecimal(workdays)} công`
+  }
+
+  if (code === 'P1' || code === 'P' || finiteNumber(day.paidLeaveWorkdays) > 0) {
+    const leave = finiteNumber(day.paidLeaveWorkdays, workdays || 1)
+    return `Phép (P1) = ${roundDecimal(leave)} công${holidayLabel ? ` · ${holidayLabel}` : ''}`
+  }
+
+  if (holidayLabel && workdays <= 0 && !checkIn && !checkOut) {
+    return `${holidayLabel} — không tự tính công`
+  }
+
+  if (checkIn && checkOut) {
+    const capped = Math.min(workedMinutes, standard)
+    const cong = roundDecimal(capped / standard, 4)
+    const parts = [
+      `${checkIn}→${checkOut} = ${Math.round(workedMinutes)}p`,
+      `÷ ${standard}p = ${roundDecimal(cong)} công`
+    ]
+    if (workedMinutes > standard) parts.push('(tối đa 1 công/ngày)')
+    if (holidayLabel) parts.push(holidayLabel)
+    return parts.join(' · ')
+  }
+
+  const hours = finiteNumber(day.hoursExact ?? day.hours)
+  if (hours > 0) {
+    const cong = roundDecimal(Math.min(hours * 60, standard) / standard, 4)
+    return `Giờ nguồn ${roundDecimal(hours)}h ÷ ${standard / 60}h = ${roundDecimal(cong)} công${holidayLabel ? ` · ${holidayLabel}` : ''}`
+  }
+
+  if (workdays > 0) {
+    return `Công nguồn = ${roundDecimal(workdays)}${holidayLabel ? ` · ${holidayLabel}` : ''}`
+  }
+
+  return holidayLabel || ''
+}
+

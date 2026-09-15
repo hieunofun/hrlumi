@@ -2,8 +2,30 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { fbGet, fbUpdate } from '../services/firebase'
 import { getCompanyIdForUser } from '../utils/companyContext'
-import { normalizeAttendanceShiftSettings } from '../utils/attendanceShift'
+import {
+  ATTENDANCE_SHIFT_IDS,
+  buildAttendanceShiftSettingsPayload,
+  getAttendanceShiftOptions,
+  normalizeAttendanceShiftSettings
+} from '../utils/attendanceShift'
+import {
+  createPenaltyCategory,
+  DEFAULT_PENALTY_CATEGORIES,
+  normalizePenaltyCategories
+} from '../utils/attendancePenalties'
 import './HolidaySettings.css'
+
+const TABS = [
+  { id: 'holidays', label: 'Cài đặt ngày lễ', icon: 'fas fa-calendar-day' },
+  { id: 'shifts', label: 'Cài đặt ca', icon: 'fas fa-clock' },
+  { id: 'penalties', label: 'Cài đặt Nội dung phạt và mức phạt', icon: 'fas fa-file-invoice-dollar' }
+]
+
+const TAB_COPY = {
+  holidays: 'Khai báo ngày lễ/ngày nghỉ để hiển thị chính xác trên Bảng Công.',
+  shifts: 'Cài giờ chuẩn từng ca. Báo cáo đi muộn/về sớm dùng ca của từng nhân viên.',
+  penalties: 'Nội dung và mức phạt này dùng khi nhập hoặc nạp Bảng phạt từ chấm công.'
+}
 
 const sortHolidays = holidays => [...(holidays || [])]
   .filter(item => /^\d{4}-\d{2}-\d{2}$/.test(String(item?.date || '')))
@@ -12,7 +34,12 @@ const sortHolidays = holidays => [...(holidays || [])]
 function HolidaySettings() {
   const { user } = useAuth()
   const companyId = useMemo(() => getCompanyIdForUser(user), [user])
-  const [holidays, setHolidays] = useState([])
+  const [activeTab, setActiveTab] = useState('holidays')
+  const [settings, setSettings] = useState(() => normalizeAttendanceShiftSettings())
+  const [penaltyCategories, setPenaltyCategories] = useState(() =>
+    DEFAULT_PENALTY_CATEGORIES.map(item => ({ ...item }))
+  )
+  const [selectedShiftId, setSelectedShiftId] = useState(ATTENDANCE_SHIFT_IDS.ADMINISTRATIVE)
   const [holidayDate, setHolidayDate] = useState('')
   const [holidayName, setHolidayName] = useState('')
   const [loading, setLoading] = useState(true)
@@ -25,9 +52,12 @@ function HolidaySettings() {
     setError('')
     try {
       const stored = await fbGet('hr/attendanceSettings/default', companyId)
-      setHolidays(sortHolidays(normalizeAttendanceShiftSettings(stored).holidays))
+      const nextSettings = normalizeAttendanceShiftSettings(stored)
+      setSettings(nextSettings)
+      setPenaltyCategories(normalizePenaltyCategories(stored?.penaltyCategories))
+      setSelectedShiftId(ATTENDANCE_SHIFT_IDS.ADMINISTRATIVE)
     } catch (requestError) {
-      setError(requestError.message || 'Không tải được cài đặt ngày lễ.')
+      setError(requestError.message || 'Không tải được cài đặt.')
     } finally {
       setLoading(false)
     }
@@ -37,6 +67,10 @@ function HolidaySettings() {
     loadSettings()
   }, [loadSettings])
 
+  const holidays = sortHolidays(settings.holidays)
+  const shiftOptions = getAttendanceShiftOptions(settings)
+  const selectedShift = settings.shifts[selectedShiftId]
+
   const addHoliday = () => {
     setError('')
     setNotice('')
@@ -44,28 +78,101 @@ function HolidaySettings() {
       setError('Vui lòng chọn ngày lễ.')
       return
     }
-    setHolidays(current => sortHolidays([
-      ...current.filter(item => item.date !== holidayDate),
-      { date: holidayDate, name: holidayName.trim() }
-    ]))
+    setSettings(current => ({
+      ...current,
+      holidays: sortHolidays([
+        ...(current.holidays || []).filter(item => item.date !== holidayDate),
+        { date: holidayDate, name: holidayName.trim() }
+      ])
+    }))
     setHolidayDate('')
     setHolidayName('')
   }
 
   const removeHoliday = date => {
     setNotice('')
-    setHolidays(current => current.filter(item => item.date !== date))
+    setSettings(current => ({
+      ...current,
+      holidays: (current.holidays || []).filter(item => item.date !== date)
+    }))
+  }
+
+  const updateSelectedShift = (field, value) => {
+    setSettings(current => ({
+      ...current,
+      shifts: {
+        ...current.shifts,
+        [selectedShiftId]: {
+          ...current.shifts[selectedShiftId],
+          [field]: value
+        }
+      }
+    }))
+  }
+
+  const updatePenaltyCategory = (key, field, value) => {
+    setNotice('')
+    setPenaltyCategories(current => current.map(item => (
+      item.key === key ? { ...item, [field]: value } : item
+    )))
+  }
+
+  const addPenaltyCategory = () => {
+    setNotice('')
+    setPenaltyCategories(current => [
+      ...current,
+      createPenaltyCategory({ label: '', amount: 0 })
+    ])
+  }
+
+  const removePenaltyCategory = key => {
+    setNotice('')
+    setPenaltyCategories(current => current.length <= 1 ? current : current.filter(item => item.key !== key))
+  }
+
+  const resetPenaltyCategories = () => {
+    setNotice('')
+    setPenaltyCategories(DEFAULT_PENALTY_CATEGORIES.map(item => ({ ...item })))
   }
 
   const saveSettings = async () => {
+    const invalidShift = getAttendanceShiftOptions(settings).find(
+      shift => shift.standardCheckIn === shift.standardCheckOut
+    )
+    if (invalidShift) {
+      setSelectedShiftId(invalidShift.id)
+      setActiveTab('shifts')
+      setError(`Giờ ra chuẩn của ${invalidShift.name} phải khác giờ vào chuẩn.`)
+      setNotice('')
+      return
+    }
+
+    const normalizedPenalties = normalizePenaltyCategories(penaltyCategories)
+    const emptyPenalty = normalizedPenalties.find(item => !item.label.trim())
+    if (emptyPenalty) {
+      setActiveTab('penalties')
+      setError('Vui lòng nhập nội dung phạt cho mọi hạng mục.')
+      setNotice('')
+      return
+    }
+
     setSaving(true)
     setError('')
     setNotice('')
     try {
-      await fbUpdate('hr/attendanceSettings/default', { holidays: sortHolidays(holidays) }, companyId)
-      setNotice('Đã lưu cài đặt ngày lễ. Hãy tổng hợp lại Bảng Công để cập nhật tháng liên quan.')
+      const payload = buildAttendanceShiftSettingsPayload({
+        ...settings,
+        holidays: sortHolidays(settings.holidays)
+      })
+      await fbUpdate('hr/attendanceSettings/default', {
+        ...payload,
+        penaltyCategories: normalizedPenalties
+      }, companyId)
+      setSettings(normalizeAttendanceShiftSettings(payload))
+      setPenaltyCategories(normalizedPenalties)
+      setNotice('Đã lưu cài đặt. Hãy tổng hợp lại Bảng Công nếu thay đổi ngày lễ hoặc ca.')
     } catch (requestError) {
-      setError(requestError.message || 'Không lưu được cài đặt ngày lễ.')
+      setError(requestError.message || 'Không lưu được cài đặt.')
     } finally {
       setSaving(false)
     }
@@ -75,52 +182,213 @@ function HolidaySettings() {
     <div className="holiday-settings-page">
       <header className="holiday-settings-head">
         <div>
-          <h1>Cài đặt ngày lễ</h1>
-          <p>Khai báo ngày lễ/ngày nghỉ để hiển thị chính xác trên Bảng Công.</p>
+          <h1>Cài đặt chấm công</h1>
+          <p>{TAB_COPY[activeTab]}</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={saveSettings} disabled={loading || saving}>
           <i className="fas fa-save"></i> {saving ? 'Đang lưu...' : 'Lưu cài đặt'}
         </button>
       </header>
 
+      <div className="holiday-settings-tabs" role="tablist" aria-label="Cài đặt chấm công">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`holiday-settings-tab${activeTab === tab.id ? ' is-active' : ''}`}
+            onClick={() => {
+              setActiveTab(tab.id)
+              setError('')
+              setNotice('')
+            }}
+          >
+            <i className={tab.icon}></i>
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
       {error && <div className="holiday-settings-alert is-error">{error}</div>}
       {notice && <div className="holiday-settings-alert is-success">{notice}</div>}
 
-      <section className="holiday-settings-card">
-        <div className="holiday-settings-form">
-          <label>
-            <span>Ngày</span>
-            <input type="date" value={holidayDate} onChange={event => setHolidayDate(event.target.value)} />
-          </label>
-          <label>
-            <span>Tên ngày lễ</span>
-            <input type="text" value={holidayName} onChange={event => setHolidayName(event.target.value)} placeholder="Ví dụ: Quốc khánh" />
-          </label>
-          <button type="button" className="btn" onClick={addHoliday} disabled={loading || !holidayDate}>
-            <i className="fas fa-plus"></i> Thêm ngày lễ
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="holiday-settings-empty">Đang tải cài đặt...</div>
-        ) : holidays.length === 0 ? (
-          <div className="holiday-settings-empty">Chưa khai báo ngày lễ.</div>
-        ) : (
-          <div className="holiday-settings-list">
-            {holidays.map(item => (
-              <div className="holiday-settings-item" key={item.date}>
-                <div>
-                  <strong>{new Date(`${item.date}T00:00:00`).toLocaleDateString('vi-VN')}</strong>
-                  <span>{item.name || 'Ngày lễ'}</span>
-                </div>
-                <button type="button" className="btn btn-icon" onClick={() => removeHoliday(item.date)} title="Xóa ngày lễ">
-                  <i className="fas fa-trash"></i>
-                </button>
-              </div>
-            ))}
+      {activeTab === 'holidays' && (
+        <section className="holiday-settings-card" role="tabpanel">
+          <div className="holiday-settings-form">
+            <label>
+              <span>Ngày</span>
+              <input type="date" value={holidayDate} onChange={event => setHolidayDate(event.target.value)} />
+            </label>
+            <label>
+              <span>Tên ngày lễ</span>
+              <input type="text" value={holidayName} onChange={event => setHolidayName(event.target.value)} placeholder="Ví dụ: Quốc khánh" />
+            </label>
+            <button type="button" className="btn" onClick={addHoliday} disabled={loading || !holidayDate}>
+              <i className="fas fa-plus"></i> Thêm ngày lễ
+            </button>
           </div>
-        )}
-      </section>
+
+          {loading ? (
+            <div className="holiday-settings-empty">Đang tải cài đặt...</div>
+          ) : holidays.length === 0 ? (
+            <div className="holiday-settings-empty">Chưa khai báo ngày lễ.</div>
+          ) : (
+            <div className="holiday-settings-list">
+              {holidays.map(item => (
+                <div className="holiday-settings-item" key={item.date}>
+                  <div>
+                    <strong>{new Date(`${item.date}T00:00:00`).toLocaleDateString('vi-VN')}</strong>
+                    <span>{item.name || 'Ngày lễ'}</span>
+                  </div>
+                  <button type="button" className="btn btn-icon" onClick={() => removeHoliday(item.date)} title="Xóa ngày lễ">
+                    <i className="fas fa-trash"></i>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === 'shifts' && (
+        <section className="holiday-settings-card" role="tabpanel">
+          {loading ? (
+            <div className="holiday-settings-empty">Đang tải cài đặt...</div>
+          ) : (
+            <>
+              <div className="holiday-settings-shift-pills">
+                {shiftOptions.map(shift => (
+                  <button
+                    key={shift.id}
+                    type="button"
+                    className={`btn${selectedShiftId === shift.id ? ' btn-primary' : ''}`}
+                    onClick={() => setSelectedShiftId(shift.id)}
+                  >
+                    {shift.name} ({shift.standardCheckIn}–{shift.standardCheckOut})
+                  </button>
+                ))}
+              </div>
+
+              <div className="holiday-settings-grid">
+                <label>
+                  <span>Tên ca</span>
+                  <input
+                    type="text"
+                    value={selectedShift?.name || ''}
+                    onChange={event => updateSelectedShift('name', event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Giờ vào chuẩn</span>
+                  <input
+                    type="time"
+                    value={selectedShift?.standardCheckIn || ''}
+                    onChange={event => updateSelectedShift('standardCheckIn', event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Giờ ra chuẩn</span>
+                  <input
+                    type="time"
+                    value={selectedShift?.standardCheckOut || ''}
+                    onChange={event => updateSelectedShift('standardCheckOut', event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Chuẩn ngày công (phút)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={settings.standardWorkMinutes || 480}
+                    onChange={event => setSettings(current => ({
+                      ...current,
+                      standardWorkMinutes: Number(event.target.value) || 480
+                    }))}
+                  />
+                </label>
+                <label>
+                  <span>Phút nghỉ không tính công</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={settings.unpaidBreakMinutes || 0}
+                    onChange={event => setSettings(current => ({
+                      ...current,
+                      unpaidBreakMinutes: Math.max(0, Number(event.target.value) || 0)
+                    }))}
+                  />
+                </label>
+              </div>
+
+              <label className="holiday-settings-check">
+                <input
+                  type="checkbox"
+                  checked={settings.overtime?.autoCalculate !== false}
+                  onChange={event => setSettings(current => ({
+                    ...current,
+                    overtime: { ...(current.overtime || {}), autoCalculate: event.target.checked }
+                  }))}
+                />
+                Tự động tính phần vượt 480 phút (HR có thể tắt để tự đánh dấu Excel)
+              </label>
+            </>
+          )}
+        </section>
+      )}
+
+      {activeTab === 'penalties' && (
+        <section className="holiday-settings-card" role="tabpanel">
+          <div className="holiday-settings-penalty-toolbar">
+            <button type="button" className="btn" onClick={addPenaltyCategory} disabled={loading}>
+              <i className="fas fa-plus"></i> Thêm nội dung phạt
+            </button>
+            <button type="button" className="btn" onClick={resetPenaltyCategories} disabled={loading}>
+              Khôi phục mặc định
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="holiday-settings-empty">Đang tải cài đặt...</div>
+          ) : (
+            <div className="holiday-settings-penalty-list">
+              <div className="holiday-settings-penalty-head">
+                <span>Nội dung phạt</span>
+                <span>Mức phạt (đ)</span>
+                <span></span>
+              </div>
+              {penaltyCategories.map(item => (
+                <div className="holiday-settings-penalty-row" key={item.key}>
+                  <input
+                    type="text"
+                    value={item.label}
+                    placeholder="Ví dụ: Đi muộn"
+                    onChange={event => updatePenaltyCategory(item.key, 'label', event.target.value)}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value={item.amount}
+                    onChange={event => updatePenaltyCategory(item.key, 'amount', Math.max(0, Number(event.target.value || 0)))}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-icon"
+                    title="Xóa hạng mục"
+                    onClick={() => removePenaltyCategory(item.key)}
+                    disabled={penaltyCategories.length <= 1}
+                  >
+                    <i className="fas fa-trash"></i>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

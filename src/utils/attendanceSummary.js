@@ -448,7 +448,9 @@ export const buildAttendanceSummary = ({
         date
       )
       const paidLeaveWorkdays = numberValue(
-        manualWorkdays[row.employeeId]?.[day] ?? 1
+        manualWorkdays[row.employeeId]?.[day] ??
+        manualWorkdays[row.employeeId]?.[String(day)] ??
+        1
       )
       row.days.set(date, {
         ...current,
@@ -459,6 +461,34 @@ export const buildAttendanceSummary = ({
         extraWorkdays: 0,
         extraWorkdaysExact: 0,
         paidLeaveWorkdays,
+        unapprovedAbsence: false
+      })
+    })
+
+    // Override công từng ngày do Kế toán/HR chỉnh tay (không chỉ ngày phép).
+    const overrides = manualWorkdays[row.employeeId] || manualWorkdays[String(row.employeeId)] || {}
+    Object.entries(overrides).forEach(([dayKey, rawValue]) => {
+      const day = Number(dayKey)
+      if (!Number.isFinite(day) || day < 1 || day > 31) return
+      const date = `${month}-${String(day).padStart(2, '0')}`
+      const current = row.days.get(date) || summarizeAttendanceDay(
+        [],
+        employee || {},
+        attendanceSettings,
+        date
+      )
+      const workdays = numberValue(rawValue)
+      const isPaidLeaveDay = permissionDays.includes(day)
+      row.days.set(date, {
+        ...current,
+        workdays,
+        workdaysExact: workdays,
+        regularWorkdays: workdays,
+        regularWorkdaysExact: workdays,
+        extraWorkdays: 0,
+        extraWorkdaysExact: 0,
+        paidLeaveWorkdays: isPaidLeaveDay ? workdays : 0,
+        manualOverride: true,
         unapprovedAbsence: false
       })
     })
@@ -563,6 +593,7 @@ export const serializeAttendanceSummaryRows = (rows = []) =>
           isHoliday: Boolean(day.isHoliday),
           holidayName: day.holidayName || '',
           holidayWorkdays: day.holidayWorkdays || 0,
+          manualOverride: Boolean(day.manualOverride),
           logs: slimDayLogs(day.logs)
         }
       ])

@@ -926,9 +926,78 @@
   font-size: 13px;
 }
 
+.attendance-matrix-table .day-col.is-sunday {
+  background: #fee2e2;
+}
+
+.attendance-matrix-table .day-col.is-sunday .day-number,
+.attendance-matrix-table .day-col.is-sunday .day-dow {
+  color: #b91c1c;
+}
+
+.attendance-matrix-table .day-col.is-saturday {
+  background: #eff6ff;
+}
+
+.attendance-matrix-table .day-col.is-holiday {
+  background: linear-gradient(180deg, #ffedd5 0%, #fdba74 100%) !important;
+  box-shadow: inset 0 0 0 1px #ea580c;
+}
+
+.attendance-matrix-table .day-col.is-holiday .day-number,
+.attendance-matrix-table .day-col.is-holiday .day-dow {
+  color: #9a3412 !important;
+  font-weight: 800;
+}
+
+.matrix-holiday-legend,
+.matrix-formula-legend,
+.matrix-edit-help {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.matrix-holiday-legend {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+}
+
+.matrix-holiday-legend span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #ffedd5;
+  font-weight: 700;
+}
+
+.matrix-formula-legend {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  color: #1e3a8a;
+  margin-top: 10px;
+}
+
+.matrix-edit-help {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+
 .attendance-matrix-table td.matrix-cell {
   min-width: 30px;
   font-weight: 500;
+  vertical-align: top;
+}
+
+.attendance-matrix-table td.matrix-cell.is-editable {
+  min-width: 58px;
+  padding: 2px;
 }
 
 .attendance-matrix-table td.matrix-cell.is-work {
@@ -939,6 +1008,44 @@
 .attendance-matrix-table td.matrix-cell.is-off {
   color: #94a3b8;
   background: #f8fafc;
+}
+
+.attendance-matrix-table td.matrix-cell.is-holiday {
+  color: #9a3412;
+  background: #ffedd5 !important;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.35);
+}
+
+.attendance-matrix-table td.matrix-cell.is-manual {
+  background: #fef3c7 !important;
+}
+
+.attendance-matrix-table .matrix-cell-value {
+  display: block;
+  line-height: 1.2;
+}
+
+.attendance-matrix-table .matrix-cell-formula {
+  display: block;
+  margin-top: 2px;
+  max-width: 72px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.attendance-matrix-table td.matrix-cell.is-holiday .matrix-cell-formula {
+  color: #c2410c;
+}
+
+.attendance-matrix-table .manual-workday-input {
+  width: 52px;
+  min-height: 26px;
+  padding: 2px 4px;
+  font-size: 12px;
 }
 
 .attendance-matrix-table td.col-company {

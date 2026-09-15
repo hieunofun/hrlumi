@@ -7,6 +7,7 @@ import { CORE_STAFF_ROLES } from './utils/staffAccess'
 
 const AttendancePreview = lazy(() => import('./pages/AttendancePreview'))
 const AttendancePenalties = lazy(() => import('./pages/AttendancePenalties'))
+const Approvals = lazy(() => import('./pages/Approvals'))
 const EmployeeLogin = lazy(() => import('./pages/EmployeeLogin'))
 const Employees = lazy(() => import('./pages/Employees'))
 const FeatureComingSoon = lazy(() => import('./pages/FeatureComingSoon'))
@@ -46,6 +47,7 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<Navigate to="/employees" replace />} />
               <Route path="/employees" element={<Employees />} />
+              <Route path="/approvals" element={<Approvals />} />
               <Route path="/bang-phat" element={<AttendancePenalties />} />
               <Route path="/attendance" element={<Navigate to="/bang-cong-preview" replace />} />
               <Route path="/honor" element={<Navigate to="/bang-cong-preview" replace />} />
@@ -58,7 +60,6 @@ function App() {
               <Route path="/kpi" element={<FeatureComingSoon />} />
               <Route path="/grading/:employeeId?" element={<FeatureComingSoon />} />
               <Route path="/tasks" element={<FeatureComingSoon />} />
-              <Route path="/approvals" element={<FeatureComingSoon />} />
             </Route>
           </Route>
         </Routes>

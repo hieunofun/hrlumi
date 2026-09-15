@@ -11,6 +11,7 @@ import {
   PENALTY_CATEGORIES,
   buildPenaltyDetailRows,
   createEmptyPenaltyRow,
+  normalizePenaltyCategories,
   normalizePenaltyRows
 } from '../utils/attendancePenalties'
 import './AttendancePenalties.css'
@@ -112,6 +113,7 @@ function AttendancePenalties() {
   const [months, setMonths] = useState([])
   const [rows, setRows] = useState([])
   const [employees, setEmployees] = useState([])
+  const [penaltyCategories, setPenaltyCategories] = useState(PENALTY_CATEGORIES)
   const [generatedAt, setGeneratedAt] = useState('')
   const [dirty, setDirty] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -161,11 +163,12 @@ function AttendancePenalties() {
       setError('')
       const initialMonth = currentMonthValue()
       try {
-        const [penaltyMonthsResult, summaryIdsResult, employeesResult, monthRowsResult] = await Promise.allSettled([
+        const [penaltyMonthsResult, summaryIdsResult, employeesResult, monthRowsResult, settingsResult] = await Promise.allSettled([
           listPenaltyMonths(),
           fbListCollectionIds('attendanceMonthSummaries'),
           listPenaltyEmployeesSlim(),
-          getPenaltiesByMonth(initialMonth)
+          getPenaltiesByMonth(initialMonth),
+          fbGet('hr/attendanceSettings/default')
         ])
 
         if (cancelled) return
@@ -187,6 +190,10 @@ function AttendancePenalties() {
 
         if (employeesResult.status === 'fulfilled') {
           setEmployees(employeesResult.value)
+        }
+
+        if (settingsResult.status === 'fulfilled') {
+          setPenaltyCategories(normalizePenaltyCategories(settingsResult.value?.penaltyCategories))
         }
 
         if (monthRowsResult.status === 'fulfilled') {
@@ -224,7 +231,7 @@ function AttendancePenalties() {
 
   const handleAddRow = async () => {
     if (!employees.length) await loadEmployees()
-    setRows(prev => [...prev, createEmptyPenaltyRow(month)])
+    setRows(prev => [...prev, createEmptyPenaltyRow(month, penaltyCategories)])
     setDirty(true)
   }
 
@@ -242,7 +249,7 @@ function AttendancePenalties() {
   }
 
   const handleSelectCategory = (rowId, category) => {
-    const found = PENALTY_CATEGORIES.find(item => item.label === category)
+    const found = penaltyCategories.find(item => item.label === category)
     handleUpdateRow(rowId, {
       category,
       amount: found ? found.amount : 0
@@ -296,7 +303,7 @@ function AttendancePenalties() {
         return
       }
       const summaryRows = hydrateAttendanceSummaryRows(snapshot.rows)
-      setRows(normalizePenaltyRows(buildPenaltyDetailRows(summaryRows)))
+      setRows(normalizePenaltyRows(buildPenaltyDetailRows(summaryRows, penaltyCategories)))
       setDirty(true)
     } catch (requestError) {
       console.error(requestError)
@@ -349,7 +356,7 @@ function AttendancePenalties() {
         </div>
       </header>
 
-      <div className="attendance-penalties-card">
+      <div className="attendance-penalties-card attendance-penalties-card--desktop">
         <div className="attendance-penalties-scroll">
           <table className="attendance-penalties-table">
             <thead>
@@ -396,10 +403,10 @@ function AttendancePenalties() {
                         value={item.category || ''}
                         onChange={event => handleSelectCategory(item.id, event.target.value)}
                       >
-                        {PENALTY_CATEGORIES.map(category => (
-                          <option key={category.label} value={category.label}>{category.label}</option>
+                        {penaltyCategories.map(category => (
+                          <option key={category.key || category.label} value={category.label}>{category.label}</option>
                         ))}
-                        {item.category && !PENALTY_CATEGORIES.some(category => category.label === item.category) && (
+                        {item.category && !penaltyCategories.some(category => category.label === item.category) && (
                           <option value={item.category}>{item.category}</option>
                         )}
                       </select>
@@ -447,6 +454,97 @@ function AttendancePenalties() {
             )}
           </table>
         </div>
+      </div>
+
+      <div className="attendance-penalties-mobile">
+        {rows.length === 0 ? (
+          <div className="attendance-penalties-mobile__empty">
+            Chưa có dòng phạt. Bấm <strong>+ Thêm dòng</strong> để nhập tay, hoặc <strong>Nạp từ chấm công</strong>.
+          </div>
+        ) : (
+          rows.map((item, index) => (
+            <article key={item.id} className="penalty-card">
+              <div className="penalty-card__head">
+                <strong>Dòng {index + 1}</strong>
+                <button type="button" className="is-danger" onClick={() => handleDeleteRow(item.id)}>Xóa</button>
+              </div>
+
+              <label className="penalty-card__field">
+                <span>Ngày</span>
+                <input
+                  type="date"
+                  value={item.date || ''}
+                  onChange={event => handleUpdateRow(item.id, { date: event.target.value })}
+                />
+              </label>
+
+              <label className="penalty-card__field">
+                <span>Nhân sự</span>
+                <EmployeeNameSuggest
+                  employees={employees}
+                  employeeId={item.employeeId}
+                  employeeName={item.employeeName}
+                  employeeCode={item.employeeCode}
+                  onSelect={employee => handleSelectEmployee(item.id, employee)}
+                />
+              </label>
+
+              <label className="penalty-card__field">
+                <span>Hạng mục phạt</span>
+                <select
+                  value={item.category || ''}
+                  onChange={event => handleSelectCategory(item.id, event.target.value)}
+                >
+                  {penaltyCategories.map(category => (
+                    <option key={category.key || category.label} value={category.label}>{category.label}</option>
+                  ))}
+                  {item.category && !penaltyCategories.some(category => category.label === item.category) && (
+                    <option value={item.category}>{item.category}</option>
+                  )}
+                </select>
+              </label>
+
+              <label className="penalty-card__field">
+                <span>Nội dung phạt</span>
+                <input
+                  type="text"
+                  value={item.content || ''}
+                  placeholder="Nội dung phạt"
+                  onChange={event => handleUpdateRow(item.id, { content: event.target.value })}
+                />
+              </label>
+
+              <label className="penalty-card__field">
+                <span>Số tiền phạt</span>
+                <input
+                  className="penalty-card__amount"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={item.amount ?? 0}
+                  onChange={event => handleUpdateRow(item.id, { amount: Number(event.target.value || 0) })}
+                />
+              </label>
+
+              <label className="penalty-card__field">
+                <span>Ghi chú</span>
+                <input
+                  type="text"
+                  value={item.note || ''}
+                  placeholder="Ghi chú"
+                  onChange={event => handleUpdateRow(item.id, { note: event.target.value })}
+                />
+              </label>
+            </article>
+          ))
+        )}
+
+        {rows.length > 0 && (
+          <div className="attendance-penalties-mobile__total">
+            <span>Tổng cộng</span>
+            <strong>{money(total)} đ</strong>
+          </div>
+        )}
       </div>
     </div>
   )
