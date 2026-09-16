@@ -193,6 +193,73 @@ function Employees() {
         setFilteredEmployees(filtered)
     }
 
+    const handleResetFilters = async () => {
+        setSearchTerm('')
+        setFilterBranch('')
+        setFilterDept('')
+        setFilterStatus('')
+        setFilterBirthMonth('')
+        setFilterContract('')
+        setFilterShift('')
+        await loadEmployees()
+    }
+
+    const handleResetData = async ({ clearAttendance = false } = {}) => {
+        const { data: allUsers, error: fetchErr } = await supabase
+            .from('users')
+            .select('id, employee_id, username, email, role')
+
+        if (fetchErr) throw fetchErr
+
+        const currentUserId = user?.id
+
+        const usersToDelete = (allUsers || []).filter(u => {
+            const email = String(u.email || '').toLowerCase()
+            const empId = String(u.employee_id || '').toUpperCase()
+            const role = String(u.role || '').toLowerCase()
+            const username = String(u.username || '').toLowerCase()
+
+            const isCurrentAuthUser = currentUserId && u.id === currentUserId
+            const isAdmin = role === 'admin' || empId === 'ADMIN' || username === 'admin' || email.includes('admin@')
+
+            return !isCurrentAuthUser && !isAdmin
+        })
+
+        if (usersToDelete.length === 0) {
+            alert('Không có dữ liệu nhân viên nào cần xóa (chỉ còn tài khoản Quản trị viên).')
+            return
+        }
+
+        const idsToDelete = usersToDelete.map(u => u.id)
+        const batchSize = 50
+        for (let i = 0; i < idsToDelete.length; i += batchSize) {
+            const batch = idsToDelete.slice(i, i + batchSize)
+            const { error: delErr } = await supabase
+                .from('users')
+                .delete()
+                .in('id', batch)
+
+            if (delErr) {
+                console.error('Lỗi khi xóa batch users:', delErr)
+                throw delErr
+            }
+        }
+
+        if (clearAttendance) {
+            try {
+                await supabase
+                    .from('hr_records')
+                    .delete()
+                    .in('collection', ['attendanceLogs', 'attendanceMonthSummaries', 'attendanceMonthConfirmations'])
+            } catch (attErr) {
+                console.warn('Lỗi khi xóa dữ liệu chấm công kèm theo:', attErr)
+            }
+        }
+
+        await loadEmployees()
+        alert(`Đã xóa thành công ${idsToDelete.length} nhân viên. Tài khoản Quản trị viên đã được bảo vệ an toàn!`)
+    }
+
     const handleDelete = async (id, name) => {
         if (!confirm(`Bạn có chắc muốn xóa nhân viên "${name}"?\n\nHành động này không thể hoàn tác!`)) {
             return
@@ -822,6 +889,9 @@ function Employees() {
         onImport={handleImportExcel}
         onDelete={handleDelete}
         onResolveEmployee={resolveEmployee}
+        onResetData={handleResetData}
+        onResetFilters={handleResetFilters}
+        adminEmail={user?.email || 'admin@company.local'}
     />
 
     /*

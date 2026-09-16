@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDateDisplay, getEmployeeEmploymentStatus } from '../utils/helpers'
+import ResetDataModal from './ResetDataModal'
 
 const EmployeeModal = lazy(() => import('./EmployeeModal'))
 const StatusHistoryView = lazy(() => import('./StatusHistoryView'))
@@ -16,11 +17,13 @@ function EmployeeDirectory({
     filterDept, setFilterDept, filterStatus, setFilterStatus, filterContract, setFilterContract,
     filterShift = '', setFilterShift,
     selectedEmployee, setSelectedEmployee, isModalOpen, setIsModalOpen, isReadOnly, setIsReadOnly,
-    onReload, onExport, onDownloadTemplate, onImport, onDelete, onResolveEmployee
+    onReload, onExport, onDownloadTemplate, onImport, onDelete, onResolveEmployee,
+    onResetData, onResetFilters, adminEmail
 }) {
     const importInputRef = useRef(null)
     const [openMenu, setOpenMenu] = useState(null)
     const [openingEmployee, setOpeningEmployee] = useState(false)
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false)
 
     const activeEmployees = useMemo(
         () => employees.filter(employee => !isResigned(employee)),
@@ -93,6 +96,9 @@ function EmployeeDirectory({
                     <button className="btn" onClick={onExport}><i className="fas fa-file-excel"></i> Xuất Excel</button>
                     <button className="btn" onClick={() => importInputRef.current?.click()}><i className="fas fa-file-import"></i> Nhập Excel</button>
                     <input ref={importInputRef} className="employees-file-input" type="file" accept=".xlsx,.xls,.csv" onChange={onImport} />
+                    <button className="btn btn-outline-danger" onClick={() => setIsResetModalOpen(true)} title="Xóa dữ liệu nhân sự đã dùng/thử nghiệm">
+                        <i className="fas fa-trash-can"></i> Reset dữ liệu
+                    </button>
                     <button className="btn btn-primary" onClick={() => openEmployee(null, false)}><i className="fas fa-plus"></i> Thêm nhân viên</button>
                 </div>
             </header>
@@ -142,7 +148,7 @@ function EmployeeDirectory({
                         <option value="Tạm nghỉ">Tạm nghỉ</option>
                         <option value="Nghỉ việc">Đã nghỉ</option>
                     </select>
-                    <button className="btn btn-icon" title="Làm mới" onClick={onReload}><i className="fas fa-rotate"></i></button>
+                    <button className="btn btn-icon" title="Làm mới & đặt lại bộ lọc" onClick={onResetFilters || onReload}><i className="fas fa-rotate"></i></button>
                 </section>
 
                 <section className="employees-table-card">
@@ -223,6 +229,14 @@ function EmployeeDirectory({
                     <EmployeeModal companyId={companyId} employee={selectedEmployee} isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedEmployee(null); setIsReadOnly(false) }} onSave={onReload} readOnly={isReadOnly} departmentOptions={departments} positionOptions={[...new Set(activeEmployees.map(e => e.vi_tri).filter(Boolean))]} />
                 </Suspense>
             )}
+
+            <ResetDataModal
+                isOpen={isResetModalOpen}
+                onClose={() => setIsResetModalOpen(false)}
+                onConfirm={onResetData}
+                totalEmployees={activeEmployees.length}
+                adminEmail={adminEmail}
+            />
         </div>
     )
 }

@@ -478,6 +478,18 @@ body {
   color: #fff;
 }
 
+.btn-outline-danger {
+  background: #fff;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.btn-outline-danger:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
 .btn-info {
   background: var(--info);
   border-color: var(--info);
