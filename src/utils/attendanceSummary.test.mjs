@@ -121,3 +121,29 @@ test('hiển thị ngày lễ cho nhân viên không có log nhưng không tự 
   assert.equal(row.attendanceDays, 0)
   assert.equal(row.workdays, 0)
 })
+
+test('tách công thực tế, phép hưởng lương và tổng công tính lương', () => {
+  const rows = buildAttendanceSummary({
+    attendanceLogs: [
+      {
+        employeeId: 'employee-breakdown',
+        date: '2026-08-03',
+        cong: 0.88,
+        hours: 7.02
+      },
+      {
+        employeeId: 'employee-breakdown',
+        date: '2026-08-04',
+        cong: 0,
+        congPlus: 1,
+        kyHieuPlus: 'V'
+      }
+    ],
+    employees: [{ id: 'employee-breakdown', name: 'Nhân viên tách công' }],
+    month: '2026-08'
+  })
+
+  assert.equal(rows[0].actualWorkdays, 0.88)
+  assert.equal(rows[0].paidLeaveWorkdays, 1)
+  assert.equal(rows[0].workdays, 1.88)
+})

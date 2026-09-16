@@ -125,6 +125,18 @@ const enrichExcelLog = (log, employeesById) => {
 }
 
 const currentMonthValue = () => new Date().toISOString().slice(0, 7)
+const roundWorkdays = value => Math.round((Number(value) || 0) * 100) / 100
+const paidLeaveWorkdaysFor = row => Math.max(0, roundWorkdays(row?.paidLeaveWorkdays))
+const actualWorkdaysFor = row => {
+  if (row?.actualWorkdays !== null && row?.actualWorkdays !== undefined) {
+    return Math.max(0, roundWorkdays(row.actualWorkdays))
+  }
+  return Math.max(0, roundWorkdays(
+    (Number(row?.workdays) || 0) - paidLeaveWorkdaysFor(row)
+  ))
+}
+const payableWorkdaysFor = row => Math.max(0, roundWorkdays(row?.workdays))
+const formatWorkdays = value => Number(value || 0).toFixed(2)
 const formatGeneratedAt = value => {
   if (!value) return ''
   const date = new Date(value)
@@ -588,8 +600,9 @@ function AttendancePreview() {
     }
 
     const headers = [
-      'STT', 'Họ tên', 'Công ty', 'Bộ phận', 'Ca làm', 'Tổng công',
-      'Notes', 'Tăng ca', 'Phép sử dụng', 'Công làm lễ', 'Công lễ'
+      'STT', 'Họ tên', 'Công ty', 'Bộ phận', 'Ca làm', 'Công thực tế',
+      'Phép hưởng lương', 'Tổng công tính lương', 'Notes', 'Tăng ca',
+      'Công làm lễ', 'Công lễ'
     ]
     const reportRows = rows.map((row, index) => [
       index + 1,
@@ -597,10 +610,11 @@ function AttendancePreview() {
       companyName,
       row.displayDepartment || row.department || '-',
       row.shift || '-',
-      row.workdays != null && row.workdays !== '' ? Number(row.workdays).toFixed(2) : '0.00',
+      formatWorkdays(actualWorkdaysFor(row)),
+      formatWorkdays(paidLeaveWorkdaysFor(row)),
+      formatWorkdays(payableWorkdaysFor(row)),
       row.notes || '-',
       row.overtimeHours ?? '-',
-      row.paidLeaveWorkdays ?? '-',
       row.congLamLe ?? row.holidayWorkdays ?? '-',
       row.congLe ?? '-'
     ])
@@ -1047,10 +1061,11 @@ function AttendancePreview() {
               <th>Công ty</th>
               <th>Bộ phận</th>
               <th>Ca làm</th>
-              <th>Tổng công</th>
+              <th className="workdays-actual-heading">Công thực tế</th>
+              <th className="workdays-leave-heading">Phép hưởng lương</th>
+              <th className="workdays-payable-heading">Tổng công tính lương</th>
               <th>Notes</th>
               <th>Tăng ca</th>
-              <th>Phép sử dụng</th>
               <th>Công làm lễ</th>
               <th>Công lễ</th>
             </tr>
@@ -1082,16 +1097,23 @@ function AttendancePreview() {
                 )}
                 <td>{row.shift}</td>
                 <td
-                  className={canEditWorkdays ? 'is-clickable workdays-total' : ''}
+                  className={`workdays-actual ${canEditWorkdays ? 'is-clickable workdays-total' : ''}`}
                   onClick={() => canEditWorkdays && setDetailRow(row)}
                   title={canEditWorkdays ? 'Mở chi tiết để chỉnh tay số công từng ngày' : undefined}
                 >
-                  {row.workdays != null && row.workdays !== '' ? Number(row.workdays).toFixed(2) : ''}
+                  {formatWorkdays(actualWorkdaysFor(row))}
                   {canEditWorkdays && <i className="fas fa-pen" aria-hidden="true"></i>}
+                </td>
+                <td className="workdays-leave">{formatWorkdays(paidLeaveWorkdaysFor(row))}</td>
+                <td
+                  className="workdays-payable"
+                  title={`${formatWorkdays(actualWorkdaysFor(row))} công thực tế + ${formatWorkdays(paidLeaveWorkdaysFor(row))} phép hưởng lương`}
+                >
+                  <strong>{formatWorkdays(payableWorkdaysFor(row))}</strong>
+                  <small>{formatWorkdays(actualWorkdaysFor(row))} làm + {formatWorkdays(paidLeaveWorkdaysFor(row))} phép</small>
                 </td>
                 <td>{row.notes || ''}</td>
                 <td>{row.overtimeHours || ''}</td>
-                <td>{row.paidLeaveWorkdays || ''}</td>
                 <td></td>
                 <td></td>
               </tr>
@@ -1170,9 +1192,10 @@ function AttendancePreview() {
             <button type="button" onClick={() => setDetailRow(null)}>Đóng</button>
           </header>
           <div className="attendance-day-detail-summary">
-            <span>Tổng công: <strong>{detailRow.workdays || 0}</strong></span>
+            <span>Công thực tế: <strong>{formatWorkdays(actualWorkdaysFor(detailRow))}</strong></span>
+            <span>Phép hưởng lương: <strong>{formatWorkdays(paidLeaveWorkdaysFor(detailRow))}</strong></span>
+            <span>Tổng công tính lương: <strong>{formatWorkdays(payableWorkdaysFor(detailRow))}</strong></span>
             <span>Tăng ca: <strong>{detailRow.overtimeHours || 0}</strong></span>
-            <span>Phép: <strong>{detailRow.paidLeaveWorkdays || 0}</strong></span>
             <span>Muộn: <strong>{detailRow.lateCount || 0}</strong></span>
             <span>Quên chấm: <strong>{detailRow.missingPunchCount || 0}</strong></span>
             {detailStandardLabel && (
@@ -1325,7 +1348,7 @@ function AttendancePreview() {
                     <th colSpan={monthDaysHeader.length} className="matrix-month-title">
                       Ngày trong tháng
                     </th>
-                    <th rowSpan="2" className="col-total">Tổng công</th>
+                    <th rowSpan="2" className="col-total">Tổng tính lương</th>
                   </tr>
                   <tr className="matrix-days-row">
                     {monthDaysHeader.map(d => (

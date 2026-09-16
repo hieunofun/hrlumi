@@ -411,7 +411,7 @@
 .attendance-preview-table.is-compact {
   table-layout: auto;
   width: 100%;
-  min-width: 980px;
+  min-width: 1120px;
 }
 
 .attendance-preview-table.is-compact .groups th {
@@ -1079,6 +1079,38 @@
   margin-left: 7px;
   color: #2563eb;
   font-size: 11px;
+}
+
+.attendance-preview-table.is-compact .groups th.workdays-actual-heading,
+.attendance-preview-table .workdays-actual {
+  background: #e8f7ee;
+}
+
+.attendance-preview-table.is-compact .groups th.workdays-leave-heading,
+.attendance-preview-table .workdays-leave {
+  background: #fff8dc;
+}
+
+.attendance-preview-table.is-compact .groups th.workdays-payable-heading,
+.attendance-preview-table .workdays-payable {
+  background: #eaf2ff;
+}
+
+.attendance-preview-table .workdays-actual,
+.attendance-preview-table .workdays-leave,
+.attendance-preview-table .workdays-payable {
+  min-width: 112px;
+  font-variant-numeric: tabular-nums;
+}
+
+.attendance-preview-table .workdays-payable small {
+  display: block;
+  margin-top: 2px;
+  color: #526477;
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .manual-workday-help {

@@ -350,6 +350,7 @@ export const buildAttendanceSummary = ({
         '',
       attendanceDays: 0,
       workdays: 0,
+      actualWorkdays: 0,
       totalHours: 0,
       overtimeHours: 0,
       lateCount: 0,
@@ -508,6 +509,7 @@ export const buildAttendanceSummary = ({
       )
 
       row.workdays += day.workdaysExact ?? day.workdays
+      row.actualWorkdays += actualWorkdays
       row.totalHours += day.hoursExact ?? day.hours
       row.overtimeHours += day.overtimeHours
       row.attendanceDays += day.hasPunch || dayWorkdays > 0 ? 1 : 0
@@ -530,6 +532,7 @@ export const buildAttendanceSummary = ({
     })
 
     row.workdays = Math.round(row.workdays * 100) / 100
+    row.actualWorkdays = Math.round(row.actualWorkdays * 100) / 100
     row.totalHours = Math.round(row.totalHours * 100) / 100
     row.overtimeHours = Math.round(row.overtimeHours * 100) / 100
     row.probationWorkdays = Math.round(row.probationWorkdays * 100) / 100
