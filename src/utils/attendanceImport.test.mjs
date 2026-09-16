@@ -43,7 +43,11 @@ test('uses the first Vào and last actual Ra instead of an unmatched later Vào'
   assert.deepEqual(result, {
     checkIn: '08:26',
     checkOut: '17:36',
-    punches: ['08:26', '17:36', '17:58']
+    punches: ['08:26', '17:36', '17:58'],
+    punchPairs: [
+      { checkIn: '08:26', checkOut: '17:36' },
+      { checkIn: '17:58', checkOut: '' }
+    ]
   })
 })
 

@@ -38,13 +38,40 @@ const normalizeTime = value => {
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return ''
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
+
+const normalizeSessionWorkdays = (value, fallback = 0.5) => {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(1, Math.max(0, parsed))
+}
+
+const normalizeSplitShift = value => {
+  const source = value && typeof value === 'object' ? value : {}
+  const morning = source.morning && typeof source.morning === 'object' ? source.morning : {}
+  const afternoon = source.afternoon && typeof source.afternoon === 'object' ? source.afternoon : {}
+  return {
+    enabled: source.enabled === true,
+    morning: {
+      start: normalizeTime(morning.start),
+      end: normalizeTime(morning.end),
+      workdays: normalizeSessionWorkdays(morning.workdays)
+    },
+    afternoon: {
+      start: normalizeTime(afternoon.start),
+      end: normalizeTime(afternoon.end),
+      workdays: normalizeSessionWorkdays(afternoon.workdays)
+    }
+  }
+}
+
 const normalizeConfiguredShift = (id, value, fallback) => {
   const source = value && typeof value === 'object' ? value : {}
   return {
     id,
     name: String(source.name || fallback.name).trim() || fallback.name,
     standardCheckIn: normalizeTime(source.standardCheckIn || source.start) || fallback.start,
-    standardCheckOut: normalizeTime(source.standardCheckOut || source.end) || fallback.end
+    standardCheckOut: normalizeTime(source.standardCheckOut || source.end) || fallback.end,
+    splitShift: normalizeSplitShift(source.splitShift || source.splitSessions)
   }
 }
 export const normalizeAttendanceShiftSettings = (settings = {}) => {
@@ -136,7 +163,8 @@ const shiftFromConfiguration = (shift, settings) => {
     ? {
         name: configured.name,
         start: configured.standardCheckIn,
-        end: configured.standardCheckOut
+        end: configured.standardCheckOut,
+        ...(configured.splitShift?.enabled ? { splitShift: configured.splitShift } : {})
       }
     : null
 }
@@ -154,7 +182,8 @@ const configuredShiftFromName = (value, settings) => {
     return {
       name: exact.name,
       start: exact.standardCheckIn,
-      end: exact.standardCheckOut
+      end: exact.standardCheckOut,
+      ...(exact.splitShift?.enabled ? { splitShift: exact.splitShift } : {})
     }
   }
 
@@ -165,6 +194,20 @@ const configuredShiftFromName = (value, settings) => {
     return shiftFromConfiguration(ATTENDANCE_SHIFT_IDS.ADMINISTRATIVE, settings)
   }
   return null
+}
+
+const attachConfiguredSplitShift = (shift, sourceName, settings) => {
+  const namedShift = configuredShiftFromName(sourceName, settings)
+  const matchedShift = namedShift || Object.values(
+    normalizeAttendanceShiftSettings(settings).shifts
+  ).find(configured =>
+    configured.standardCheckIn === shift.start &&
+    configured.standardCheckOut === shift.end
+  )
+
+  return matchedShift?.splitShift?.enabled
+    ? { ...shift, splitShift: matchedShift.splitShift }
+    : shift
 }
 
 const rangeFromText = value => {
@@ -238,21 +281,23 @@ export const resolveAttendanceShift = (employee = {}, log = {}, settings = {}) =
     employee.gio_ra_ca
   ))
   if (employeeStart && employeeEnd) {
-    return {
-      name: firstValue(...employeeShiftFields(employee)) || 'Ca nhân viên',
+    const name = firstValue(...employeeShiftFields(employee)) || 'Ca nhân viên'
+    return attachConfiguredSplitShift({
+      name,
       start: employeeStart,
       end: employeeEnd
-    }
+    }, name, settings)
   }
 
   const employeeRange = employeeShiftFields(employee)
     .map(rangeFromText)
     .find(Boolean)
   if (employeeRange) {
-    return {
-      name: firstValue(...employeeShiftFields(employee)) || 'Ca nhân viên',
+    const name = firstValue(...employeeShiftFields(employee)) || 'Ca nhân viên'
+    return attachConfiguredSplitShift({
+      name,
       ...employeeRange
-    }
+    }, name, settings)
   }
 
   const logStart = normalizeTime(firstValue(
@@ -268,21 +313,23 @@ export const resolveAttendanceShift = (employee = {}, log = {}, settings = {}) =
     log.gio_ra_ca
   ))
   if (logStart && logEnd) {
-    return {
-      name: firstValue(log.shiftName, log.tenCa) || 'Ca chấm công',
+    const name = firstValue(log.shiftName, log.tenCa) || 'Ca chấm công'
+    return attachConfiguredSplitShift({
+      name,
       start: logStart,
       end: logEnd
-    }
+    }, name, settings)
   }
 
   const logRange = [log.shiftName, log.tenCa]
     .map(rangeFromText)
     .find(Boolean)
   if (logRange) {
-    return {
-      name: firstValue(log.shiftName, log.tenCa) || 'Ca chấm công',
+    const name = firstValue(log.shiftName, log.tenCa) || 'Ca chấm công'
+    return attachConfiguredSplitShift({
+      name,
       ...logRange
-    }
+    }, name, settings)
   }
 
   const employeeConfiguredShift = configuredShiftFromName(

@@ -225,6 +225,8 @@ function AttendanceImportModal({
     }
 
     const hasActualPunchPair = Boolean(checkInStr && checkOutStr && !extra.syntheticPunch)
+    const resolvedShift = resolveAttendanceShift(sysEmp, extra, attendanceSettings)
+    const punchPairs = stats.punchPairs || extra.punchPairs || []
     const metrics = calculateAttendanceMetrics({
       log: extra,
       checkIn: checkInStr,
@@ -232,6 +234,8 @@ function AttendanceImportModal({
       standardMinutes: Number(attendanceSettings.standardWorkMinutes) || STANDARD_WORK_MINUTES,
       breakMinutes: Number(attendanceSettings.unpaidBreakMinutes) || 0,
       autoCalculateOvertime: false,
+      punchPairs,
+      splitShift: resolvedShift?.splitShift,
       fallbackHours: Number(extra.hours ?? stats.hours ?? 0) || 0,
       fallbackWorkdays: extra.cong ?? stats.regularWorkdays
     })
@@ -323,7 +327,8 @@ function AttendanceImportModal({
       overtimeMinutes: metrics.overtimeMinutes,
       overtimeAutoDisabled: true,
       syntheticPunch: Boolean(extra.syntheticPunch),
-      punches: stats.punches || []
+      punches: stats.punches || [],
+      punchPairs
     }
   }
 
@@ -380,13 +385,13 @@ function AttendanceImportModal({
         shiftName: caIdx >= 0 ? String(row[caIdx] || '') : ''
       }
 
-      const { checkIn: vao, checkOut: ra, punches } =
+      const { checkIn: vao, checkOut: ra, punches, punchPairs } =
         collectAttendancePunches(row, punchColumns, parseTime)
       let stats
       if (vao && ra) {
-        stats = { ...calculateStats([vao, ra], sysEmp, rowContext), punches }
+        stats = { ...calculateStats([vao, ra], sysEmp, rowContext), punches, punchPairs }
       } else if (vao) {
-        stats = { ...calculateStats([vao], sysEmp, rowContext), punches }
+        stats = { ...calculateStats([vao], sysEmp, rowContext), punches, punchPairs }
       } else if (ra) {
         stats = {
           checkIn: null,
@@ -395,7 +400,8 @@ function AttendanceImportModal({
           status: 'Thiếu vào',
           lateMinutes: 0,
           earlyMinutes: 0,
-          punches
+          punches,
+          punchPairs
         }
       } else {
         stats = {
@@ -405,7 +411,8 @@ function AttendanceImportModal({
           status: 'Đủ',
           lateMinutes: 0,
           earlyMinutes: 0,
-          punches: []
+          punches: [],
+          punchPairs: []
         }
       }
 

@@ -147,3 +147,81 @@ test('tách công thực tế, phép hưởng lương và tổng công tính lư
   assert.equal(rows[0].paidLeaveWorkdays, 1)
   assert.equal(rows[0].workdays, 1.88)
 })
+
+test('tự dùng hai buổi khi có hai cặp chấm và giữ full ngày khi chỉ có một cặp', () => {
+  const attendanceSettings = {
+    shifts: {
+      administrative: {
+        name: 'Ca Hành chính',
+        standardCheckIn: '08:30',
+        standardCheckOut: '17:30',
+        splitShift: {
+          enabled: true,
+          morning: { start: '08:30', end: '12:00', workdays: 0.5 },
+          afternoon: { start: '13:00', end: '17:30', workdays: 0.5 }
+        }
+      },
+      saleMorning: {
+        name: 'Ca Sáng Sale',
+        standardCheckIn: '04:00',
+        standardCheckOut: '13:30',
+        splitShift: {
+          enabled: true,
+          morning: { start: '04:00', end: '08:00', workdays: 0.5 },
+          afternoon: { start: '09:30', end: '13:30', workdays: 0.5 }
+        }
+      }
+    }
+  }
+  const rows = buildAttendanceSummary({
+    attendanceLogs: [
+      {
+        employeeId: 'split-worker',
+        date: '2026-08-03',
+        vao: '08:30',
+        ra: '17:30',
+        punchPairs: [
+          { checkIn: '08:30', checkOut: '12:00' },
+          { checkIn: '13:00', checkOut: '17:30' }
+        ]
+      },
+      {
+        employeeId: 'full-worker',
+        date: '2026-08-03',
+        vao: '08:30',
+        ra: '17:30',
+        punchPairs: [{ checkIn: '08:30', checkOut: '17:30' }]
+      },
+      {
+        employeeId: 'sale-split-worker',
+        date: '2026-08-03',
+        vao: '04:00',
+        ra: '13:30',
+        punchPairs: [
+          { checkIn: '04:00', checkOut: '08:00' },
+          { checkIn: '09:30', checkOut: '13:30' }
+        ]
+      }
+    ],
+    employees: [
+      { id: 'split-worker', name: 'Nhân viên chia buổi', shift: 'Ca Hành chính' },
+      { id: 'full-worker', name: 'Nhân viên full ngày', shift: 'Ca Hành chính' },
+      { id: 'sale-split-worker', name: 'Sale chia buổi', shift: 'Ca Sáng Sale', position: 'Sale' }
+    ],
+    month: '2026-08',
+    attendanceSettings
+  })
+
+  const splitDay = rows.find(row => row.employeeId === 'split-worker').days.get('2026-08-03')
+  const fullDay = rows.find(row => row.employeeId === 'full-worker').days.get('2026-08-03')
+  const saleSplitDay = rows.find(row => row.employeeId === 'sale-split-worker').days.get('2026-08-03')
+  assert.equal(splitDay.calculationMode, 'split-shift')
+  assert.equal(splitDay.hours, 8)
+  assert.equal(splitDay.workdays, 1)
+  assert.equal(fullDay.calculationMode, 'full-day')
+  assert.equal(fullDay.hours, 9)
+  assert.equal(fullDay.workdays, 1)
+  assert.equal(saleSplitDay.calculationMode, 'split-shift')
+  assert.equal(saleSplitDay.hours, 8)
+  assert.equal(saleSplitDay.workdays, 1)
+})

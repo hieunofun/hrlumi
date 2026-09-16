@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   calculateAttendanceMetrics,
+  calculateSplitShiftWork,
   calculateWorkedMinutes,
+  describeDayWorkFormula,
   getAttendanceHoliday
 } from './attendanceCalculations.js'
 
@@ -46,3 +48,64 @@ test('nhận diện ngày lễ đã được cấu hình', () => {
   assert.equal(getAttendanceHoliday('2026-09-03', { holidays: [] }), null)
 })
 
+const splitShift = {
+  enabled: true,
+  morning: { start: '08:30', end: '12:00', workdays: 0.5 },
+  afternoon: { start: '13:00', end: '17:30', workdays: 0.5 }
+}
+
+test('chia hai cặp chấm thành buổi sáng và chiều, không tính giờ nghỉ giữa ca', () => {
+  const result = calculateAttendanceMetrics({
+    checkIn: '08:30',
+    checkOut: '17:30',
+    punchPairs: [
+      { checkIn: '08:30', checkOut: '12:00' },
+      { checkIn: '13:00', checkOut: '17:30' }
+    ],
+    splitShift,
+    autoCalculateOvertime: false
+  })
+
+  assert.equal(result.calculationMode, 'split-shift')
+  assert.equal(result.hours, 8)
+  assert.equal(result.regularWorkdays, 1)
+  assert.equal(result.overtimeHours, 0)
+})
+
+test('một cặp phủ cả ngày vẫn giữ cách tính full ngày', () => {
+  const result = calculateAttendanceMetrics({
+    checkIn: '08:30',
+    checkOut: '17:30',
+    punchPairs: [{ checkIn: '08:30', checkOut: '17:30' }],
+    splitShift,
+    autoCalculateOvertime: false
+  })
+
+  assert.equal(result.calculationMode, 'full-day')
+  assert.equal(result.hours, 9)
+  assert.equal(result.regularWorkdays, 1)
+})
+
+test('một cặp nằm trong buổi sáng được chặn tối đa nửa công', () => {
+  const result = calculateSplitShiftWork({
+    punchPairs: [{ checkIn: '08:30', checkOut: '12:00' }],
+    splitShift
+  })
+
+  assert.equal(result.regularWorkdays, 0.5)
+  assert.equal(result.workedMinutes, 210)
+})
+
+test('mô tả rõ số công riêng của từng buổi trên bảng công', () => {
+  const formula = describeDayWorkFormula({
+    calculationMode: 'split-shift',
+    workdaysExact: 1,
+    splitShiftBreakdown: [
+      { label: 'Buổi sáng', minutes: 210, workdays: 0.5 },
+      { label: 'Buổi chiều', minutes: 270, workdays: 0.5 }
+    ]
+  })
+
+  assert.match(formula, /Buổi sáng 210p = 0.5 công/)
+  assert.match(formula, /Tổng 1 công/)
+})

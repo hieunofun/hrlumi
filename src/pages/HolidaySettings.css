@@ -78,6 +78,7 @@
 
 .holiday-settings-form input,
 .holiday-settings-grid input,
+.holiday-settings-session input,
 .holiday-settings-penalty-row input {
   width: 100%;
   min-height: 40px;
@@ -160,6 +161,70 @@
   color: #334155;
 }
 
+.holiday-settings-split-card {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.holiday-settings-split-toggle {
+  margin-top: 0;
+}
+
+.holiday-settings-split-toggle > span {
+  display: grid;
+  gap: 3px;
+}
+
+.holiday-settings-split-toggle strong {
+  color: #0f3f78;
+}
+
+.holiday-settings-split-toggle small,
+.holiday-settings-split-note {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.holiday-settings-session-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.holiday-settings-session {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dbe5f0;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.holiday-settings-session h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #0f3f78;
+  font-size: 15px;
+}
+
+.holiday-settings-session label {
+  display: grid;
+  gap: 6px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.holiday-settings-split-note {
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+
 .holiday-settings-penalty-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -196,6 +261,8 @@
 
   .holiday-settings-form,
   .holiday-settings-grid,
+  .holiday-settings-session-grid,
+  .holiday-settings-session,
   .holiday-settings-penalty-head,
   .holiday-settings-penalty-row {
     grid-template-columns: 1fr;

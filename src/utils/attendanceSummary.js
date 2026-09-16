@@ -17,6 +17,26 @@ const numberValue = (value) => {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+const attendancePunchPairs = log => {
+  if (Array.isArray(log?.punchPairs) && log.punchPairs.length) {
+    return log.punchPairs
+      .map(pair => ({
+        checkIn: formatAttendanceTime(pair?.checkIn),
+        checkOut: formatAttendanceTime(pair?.checkOut)
+      }))
+      .filter(pair => pair.checkIn || pair.checkOut)
+  }
+  const punches = Array.isArray(log?.punches)
+    ? log.punches.map(formatAttendanceTime).filter(Boolean)
+    : []
+  if (punches.length < 4) return []
+  const pairs = []
+  for (let index = 0; index < punches.length; index += 2) {
+    pairs.push({ checkIn: punches[index] || '', checkOut: punches[index + 1] || '' })
+  }
+  return pairs
+}
+
 export const attendanceDateString = (log) => {
   if (log?.date) return String(log.date).slice(0, 10)
   if (!log?.timestamp) return ''
@@ -49,6 +69,8 @@ export const summarizeAttendanceDay = (logs, employee = {}, attendanceSettings =
   let checkIn = ''
   let checkOut = ''
   let shiftName = ''
+  let calculationMode = 'full-day'
+  let splitShiftBreakdown = []
   const sampleLog = logs[0] || {}
   const resolvedShift = resolveAttendanceShift(employee, sampleLog, attendanceSettings)
   const standardCheckIn = formatAttendanceTime(resolvedShift?.start || resolvedShift?.standardCheckIn)
@@ -149,11 +171,15 @@ export const summarizeAttendanceDay = (logs, employee = {}, attendanceSettings =
       checkOut: lastPunch.checkOut,
       standardMinutes,
       breakMinutes,
-      autoCalculateOvertime
+      autoCalculateOvertime,
+      punchPairs: logs.flatMap(attendancePunchPairs),
+      splitShift: resolvedShift?.splitShift
     })
     hours = metrics.hours
     workdays = metrics.regularWorkdays
     overtimeHours = metrics.overtimeHours
+    calculationMode = metrics.calculationMode || 'full-day'
+    splitShiftBreakdown = metrics.splitShiftBreakdown || []
   } else if (!hasSourceWorkday) {
     const metrics = calculateAttendanceMetrics({
       log: logs[0] || {},
@@ -206,6 +232,8 @@ export const summarizeAttendanceDay = (logs, employee = {}, attendanceSettings =
     isHoliday: Boolean(holiday),
     holidayName: holiday?.name || '',
     holidayWorkdays: holiday ? roundDecimal(regularWorkdaysExact + extraWorkdaysExact) : 0,
+    calculationMode,
+    splitShiftBreakdown,
     logs
   }
 }
@@ -557,7 +585,9 @@ const slimDayLogs = (logs = []) =>
     vao: log.vao || log.checkIn || '',
     ra: log.ra || log.checkOut || '',
     shiftName: log.shiftName || log.tenCa || '',
-    tenCa: log.tenCa || log.shiftName || ''
+    tenCa: log.tenCa || log.shiftName || '',
+    punches: Array.isArray(log.punches) ? log.punches : [],
+    punchPairs: Array.isArray(log.punchPairs) ? log.punchPairs : []
   }))
 /** Persist summary rows to hr_records (Map → plain object, slim logs). */
 export const serializeAttendanceSummaryRows = (rows = []) =>
@@ -597,6 +627,8 @@ export const serializeAttendanceSummaryRows = (rows = []) =>
           holidayName: day.holidayName || '',
           holidayWorkdays: day.holidayWorkdays || 0,
           manualOverride: Boolean(day.manualOverride),
+          calculationMode: day.calculationMode || 'full-day',
+          splitShiftBreakdown: day.splitShiftBreakdown || [],
           logs: slimDayLogs(day.logs)
         }
       ])

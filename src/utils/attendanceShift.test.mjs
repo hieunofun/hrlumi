@@ -116,3 +116,39 @@ test('formats stored timestamps in the attendance timezone', () => {
   assert.equal(formatAttendanceTime('2026-08-05T21:02:00.000Z'), '04:02')
   assert.equal(formatAttendanceTime('8:30 PM'), '20:30')
 })
+
+test('lưu cấu hình chia hai buổi độc lập cho từng ca', () => {
+  const settings = normalizeAttendanceShiftSettings({
+    shifts: {
+      administrative: {
+        splitShift: {
+          enabled: true,
+          morning: { start: '08:30', end: '12:00', workdays: 0.5 },
+          afternoon: { start: '13:00', end: '17:30', workdays: 0.5 }
+        }
+      },
+      saleMorning: {
+        splitShift: {
+          enabled: true,
+          morning: { start: '04:00', end: '08:00', workdays: 0.5 },
+          afternoon: { start: '09:00', end: '13:30', workdays: 0.5 }
+        }
+      }
+    }
+  })
+  const payload = buildAttendanceShiftSettingsPayload(settings)
+
+  assert.equal(payload.shifts.administrative.splitShift.morning.end, '12:00')
+  assert.equal(payload.shifts.saleMorning.splitShift.afternoon.start, '09:00')
+  assert.equal(
+    resolveAttendanceShift({ shift: 'Ca Sáng Sale', position: 'Sale' }, {}, settings).splitShift.enabled,
+    true
+  )
+
+  const explicitEmployeeShift = resolveAttendanceShift({
+    shift: 'Ca Hành chính',
+    standardCheckIn: '08:30',
+    standardCheckOut: '17:30'
+  }, {}, settings)
+  assert.equal(explicitEmployeeShift.splitShift.morning.end, '12:00')
+})

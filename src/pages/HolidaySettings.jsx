@@ -110,6 +110,61 @@ function HolidaySettings() {
     }))
   }
 
+  const toggleSelectedSplitShift = enabled => {
+    setSettings(current => {
+      const shift = current.shifts[selectedShiftId]
+      const splitShift = shift.splitShift || {}
+      const defaultSessions = selectedShiftId === ATTENDANCE_SHIFT_IDS.SALE_MORNING
+        ? { morningEnd: '08:00', afternoonStart: '09:30' }
+        : { morningEnd: '12:00', afternoonStart: '13:00' }
+      return {
+        ...current,
+        shifts: {
+          ...current.shifts,
+          [selectedShiftId]: {
+            ...shift,
+            splitShift: {
+              ...splitShift,
+              enabled,
+              morning: {
+                start: splitShift.morning?.start || shift.standardCheckIn || '',
+                end: splitShift.morning?.end || defaultSessions.morningEnd,
+                workdays: splitShift.morning?.workdays ?? 0.5
+              },
+              afternoon: {
+                start: splitShift.afternoon?.start || defaultSessions.afternoonStart,
+                end: splitShift.afternoon?.end || shift.standardCheckOut || '',
+                workdays: splitShift.afternoon?.workdays ?? 0.5
+              }
+            }
+          }
+        }
+      }
+    })
+  }
+
+  const updateSelectedSplitSession = (session, field, value) => {
+    setSettings(current => {
+      const shift = current.shifts[selectedShiftId]
+      return {
+        ...current,
+        shifts: {
+          ...current.shifts,
+          [selectedShiftId]: {
+            ...shift,
+            splitShift: {
+              ...(shift.splitShift || {}),
+              [session]: {
+                ...(shift.splitShift?.[session] || {}),
+                [field]: value
+              }
+            }
+          }
+        }
+      }
+    })
+  }
+
   const updatePenaltyCategory = (key, field, value) => {
     setNotice('')
     setPenaltyCategories(current => current.map(item => (
@@ -143,6 +198,24 @@ function HolidaySettings() {
       setSelectedShiftId(invalidShift.id)
       setActiveTab('shifts')
       setError(`Giờ ra chuẩn của ${invalidShift.name} phải khác giờ vào chuẩn.`)
+      setNotice('')
+      return
+    }
+
+    const invalidSplitShift = getAttendanceShiftOptions(settings).find(shift => {
+      if (!shift.splitShift?.enabled) return false
+      const sessions = [shift.splitShift.morning, shift.splitShift.afternoon]
+      return sessions.some(session =>
+        !session?.start || !session?.end || session.start >= session.end ||
+        Number(session.workdays) <= 0 || Number(session.workdays) > 1
+      ) ||
+        sessions[0]?.end > sessions[1]?.start ||
+        sessions.reduce((sum, session) => sum + Number(session.workdays || 0), 0) > 1
+    })
+    if (invalidSplitShift) {
+      setSelectedShiftId(invalidSplitShift.id)
+      setActiveTab('shifts')
+      setError(`Vui lòng kiểm tra giờ và mức công hai buổi của ${invalidSplitShift.name}. Tổng hai buổi không được vượt quá 1 công.`)
       setNotice('')
       return
     }
@@ -321,6 +394,69 @@ function HolidaySettings() {
                     }))}
                   />
                 </label>
+              </div>
+
+              <div className="holiday-settings-split-card">
+                <label className="holiday-settings-check holiday-settings-split-toggle">
+                  <input
+                    type="checkbox"
+                    checked={selectedShift?.splitShift?.enabled === true}
+                    onChange={event => toggleSelectedSplitShift(event.target.checked)}
+                  />
+                  <span>
+                    <strong>Bật chia ca thành 2 buổi</strong>
+                    <small>Không thay đổi chấm công full ngày. Khi có lượt ra/vào giữa ca, hệ thống tính riêng từng buổi.</small>
+                  </span>
+                </label>
+
+                {selectedShift?.splitShift?.enabled && (
+                  <>
+                    <div className="holiday-settings-session-grid">
+                      {[
+                        { key: 'morning', label: 'Buổi sáng' },
+                        { key: 'afternoon', label: 'Buổi chiều' }
+                      ].map(session => (
+                        <div className="holiday-settings-session" key={session.key}>
+                          <h3>{session.label}</h3>
+                          <label>
+                            <span>Bắt đầu</span>
+                            <input
+                              type="time"
+                              value={selectedShift.splitShift[session.key]?.start || ''}
+                              onChange={event => updateSelectedSplitSession(session.key, 'start', event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            <span>Kết thúc</span>
+                            <input
+                              type="time"
+                              value={selectedShift.splitShift[session.key]?.end || ''}
+                              onChange={event => updateSelectedSplitSession(session.key, 'end', event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            <span>Công tối đa</span>
+                            <input
+                              type="number"
+                              min="0.01"
+                              max="1"
+                              step="0.05"
+                              value={selectedShift.splitShift[session.key]?.workdays ?? 0.5}
+                              onChange={event => updateSelectedSplitSession(
+                                session.key,
+                                'workdays',
+                                Number(event.target.value)
+                              )}
+                            />
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="holiday-settings-split-note">
+                      Các mốc giờ đều có thể sửa riêng cho từng ca. Có một cặp Vào/Ra phủ cả ngày thì vẫn dùng cách tính full ngày hiện tại; có hai cặp hoặc chỉ làm một buổi thì dùng cấu hình trên.
+                    </p>
+                  </>
+                )}
               </div>
 
               <label className="holiday-settings-check">

@@ -99,10 +99,17 @@ export const collectAttendancePunches = (
   const checkIns = columns.checkInIndexes.map(parsedAt).filter(Boolean)
   const checkOuts = columns.checkOutIndexes.map(parsedAt).filter(Boolean)
   const punches = columns.allIndexes.map(parsedAt).filter(Boolean)
+  const punchPairs = Array.from({
+    length: Math.max(columns.checkInIndexes.length, columns.checkOutIndexes.length)
+  }, (_, index) => ({
+    checkIn: parsedAt(columns.checkInIndexes[index]),
+    checkOut: parsedAt(columns.checkOutIndexes[index])
+  })).filter(pair => pair.checkIn || pair.checkOut)
 
   return {
     checkIn: checkIns[0] || '',
     checkOut: checkOuts[checkOuts.length - 1] || '',
-    punches
+    punches,
+    punchPairs
   }
 }
